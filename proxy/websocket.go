@@ -28,7 +28,7 @@ var defaultWebSocket webSocket
 // 	transfer(log, conn, remoteConn)
 // }
 
-func (s *webSocket) wss(res http.ResponseWriter, req *http.Request) {
+func (s *webSocket) wss(res http.ResponseWriter, req *http.Request, tlsConfig *tls.Config) {
 	log := log.WithField("in", "webSocket.wss").WithField("host", req.Host)
 
 	upgradeBuf, err := httputil.DumpRequest(req, false)
@@ -50,7 +50,7 @@ func (s *webSocket) wss(res http.ResponseWriter, req *http.Request) {
 	if !strings.Contains(host, ":") {
 		host = host + ":443"
 	}
-	conn, err := tls.Dial("tcp", host, nil)
+	conn, err := tls.Dial("tcp", host, tlsConfig)
 	if err != nil {
 		log.Errorf("tls.Dial: %v\n", err)
 		return

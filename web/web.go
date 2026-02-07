@@ -4,11 +4,12 @@ import (
 	"embed"
 	"fmt"
 	"io/fs"
+	"net"
 	"net/http"
 	"sync"
-
+	
 	"github.com/gorilla/websocket"
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,6 +18,7 @@ var assets embed.FS
 
 type WebAddon struct {
 	proxy.BaseAddon
+    Addr string // Listening address
 
 	server   *http.Server
 	upgrader *websocket.Upgrader
@@ -51,13 +53,31 @@ func NewWebAddon(addr string) *WebAddon {
 	web.server = &http.Server{Addr: addr, Handler: serverMux}
 	web.conns = make([]*concurrentConn, 0)
 
-	go func() {
-		log.Infof("web interface start listen at %v\n", addr)
-		err := web.server.ListenAndServe()
-		log.Error(err)
-	}()
-
 	return web
+}
+
+func (web *WebAddon) Start() {
+	addr := web.server.Addr
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		log.Errorf("web addon listen error: %v", err)
+		return
+	}
+	web.Addr = ln.Addr().String() // Update real address
+
+	go func() {
+		log.Infof("web interface start listen at %v\n", web.Addr)
+		err := web.server.Serve(ln)
+		if err != nil && err != http.ErrServerClosed {
+			log.Error(err)
+		}
+	}()
+}
+
+func (web *WebAddon) Close() {
+    if web.server != nil {
+        web.server.Close()
+    }
 }
 
 func (web *WebAddon) echo(w http.ResponseWriter, r *http.Request) {

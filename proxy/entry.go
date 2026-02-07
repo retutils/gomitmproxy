@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
+	"github.com/retutils/gomitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -183,7 +183,11 @@ func (e *entry) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	if e.proxy.authProxy != nil {
 		b, err := e.proxy.authProxy(res, req)
 		if !b {
-			log.Errorf("Proxy authentication failed: %s", err.Error())
+            errMsg := "unknown"
+            if err != nil {
+                errMsg = err.Error()
+            }
+			log.Errorf("Proxy authentication failed: %s", errMsg)
 			httpError(res, "", http.StatusProxyAuthRequired)
 			return
 		}
@@ -222,11 +226,11 @@ func (e *entry) handleConnect(res http.ResponseWriter, req *http.Request) {
 	})
 
 	shouldIntercept := proxy.shouldIntercept == nil || proxy.shouldIntercept(req)
-	f := newFlow()
-	f.Request = newRequest(req)
+	f := NewFlow()
+	f.Request = NewRequest(req)
 	f.ConnContext = req.Context().Value(connContextKey).(*ConnContext)
 	f.ConnContext.Intercept = shouldIntercept
-	defer f.finish()
+	defer f.Finish()
 
 	// trigger addon event Requestheaders
 	for _, addon := range proxy.Addons {

@@ -21,7 +21,7 @@ type Request struct {
 	raw *http.Request
 }
 
-func newRequest(req *http.Request) *Request {
+func NewRequest(req *http.Request) *Request {
 	return &Request{
 		Method: req.Method,
 		URL:    req.URL,
@@ -29,6 +29,10 @@ func newRequest(req *http.Request) *Request {
 		Header: req.Header,
 		raw:    req,
 	}
+}
+
+func (r *Request) SetRaw(req *http.Request) {
+    r.raw = req
 }
 
 func (r *Request) Raw() *http.Request {
@@ -83,10 +87,18 @@ func (req *Request) UnmarshalJSON(data []byte) error {
 		header[k] = svals
 	}
 
+
+	getString := func(key string) string {
+		if v, ok := r[key].(string); ok {
+			return v
+		}
+		return ""
+	}
+
 	*req = Request{
-		Method: r["method"].(string),
+		Method: getString("method"),
 		URL:    u,
-		Proto:  r["proto"].(string),
+		Proto:  getString("proto"),
 		Header: header,
 	}
 	return nil
@@ -116,7 +128,7 @@ type Flow struct {
 	done              chan struct{}
 }
 
-func newFlow() *Flow {
+func NewFlow() *Flow {
 	return &Flow{
 		Id:   uuid.NewV4(),
 		done: make(chan struct{}),
@@ -127,7 +139,7 @@ func (f *Flow) Done() <-chan struct{} {
 	return f.done
 }
 
-func (f *Flow) finish() {
+func (f *Flow) Finish() {
 	close(f.done)
 }
 

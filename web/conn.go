@@ -6,7 +6,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/websocket"
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
 )
 

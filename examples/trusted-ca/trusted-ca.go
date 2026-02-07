@@ -8,7 +8,7 @@ import (
 
 	"github.com/golang/groupcache/lru"
 	"github.com/golang/groupcache/singleflight"
-	"github.com/lqqyt2423/go-mitmproxy/cert"
+	"github.com/retutils/gomitmproxy/cert"
 	log "github.com/sirupsen/logrus"
 )
 

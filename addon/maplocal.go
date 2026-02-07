@@ -7,8 +7,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/internal/helper"
+	"github.com/retutils/gomitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -17,7 +17,7 @@ type mapLocalTo struct {
 }
 
 type mapLocalItem struct {
-	From   *mapFrom
+	From   *MapFrom
 	To     *mapLocalTo
 	Enable bool
 }
@@ -26,7 +26,7 @@ func (item *mapLocalItem) match(req *proxy.Request) bool {
 	if !item.Enable {
 		return false
 	}
-	return item.From.match(req)
+	return item.From.Match(req)
 }
 
 func (item *mapLocalItem) response(req *proxy.Request) (string, *proxy.Response) {
@@ -117,8 +117,8 @@ func (ml *MapLocal) validate() error {
 		if item.From == nil {
 			return fmt.Errorf("%v no item.From", i)
 		}
-		if item.From.Protocol != "" && item.From.Protocol != "http" && item.From.Protocol != "https" {
-			return fmt.Errorf("%v invalid item.From.Protocol %v", i, item.From.Protocol)
+		if err := item.From.Validate(); err != nil {
+			return fmt.Errorf("%v %w", i, err)
 		}
 		if item.To == nil {
 			return fmt.Errorf("%v no item.To", i)

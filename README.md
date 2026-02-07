@@ -35,7 +35,7 @@
 ### Installation
 
 ```bash
-go install github.com/lqqyt2423/go-mitmproxy/cmd/go-mitmproxy@latest
+go install github.com/retutils/gomitmproxy/cmd/go-mitmproxy@latest
 ```
 
 ### Usage
@@ -100,7 +100,7 @@ package main
 import (
 	"log"
 
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/proxy"
 )
 
 func main() {

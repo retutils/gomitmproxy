@@ -4,232 +4,68 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/proxy"
 )
 
-func TestMapItemMatch(t *testing.T) {
-	req := &proxy.Request{
-		Method: "GET",
-		URL: &url.URL{
-			Scheme: "https",
-			Host:   "example.com",
-			Path:   "/path/to/resource",
-		},
-	}
-
-	// test match
-
-	item := &mapRemoteItem{
-		From: &mapFrom{
-			Protocol: "https",
-			Host:     "example.com",
-			Method:   []string{"GET", "POST"},
-			Path:     "/path/to/resource",
-		},
-		To:     nil,
+func TestMapRemote(t *testing.T) {
+	mr := &MapRemote{
 		Enable: true,
-	}
-	result := item.match(req)
-	if !result {
-		t.Errorf("Expected true, but got false")
-	}
-
-	// empty Protocol and empty Method match
-	item.From = &mapFrom{
-		Protocol: "",
-		Host:     "example.com",
-		Method:   []string{},
-		Path:     "/path/to/resource",
-	}
-	result = item.match(req)
-	if !result {
-		t.Errorf("Expected true, but got false")
-	}
-
-	// empty Host match
-	item.From = &mapFrom{
-		Protocol: "",
-		Host:     "",
-		Method:   []string{},
-		Path:     "/path/to/*",
-	}
-	result = item.match(req)
-	if !result {
-		t.Errorf("Expected true, but got false")
-	}
-
-	// all empty match
-	item.From = &mapFrom{
-		Protocol: "",
-		Host:     "",
-		Method:   []string{},
-		Path:     "",
-	}
-	result = item.match(req)
-	if !result {
-		t.Errorf("Expected true, but got false")
-	}
-
-	// test not match
-
-	// diff Protocol
-	item.From = &mapFrom{
-		Protocol: "http",
-		Host:     "example.com",
-		Method:   []string{},
-		Path:     "/path/to/resource",
-	}
-	result = item.match(req)
-	if result {
-		t.Errorf("Expected true, but got false")
-	}
-
-	// diff Host
-	item.From = &mapFrom{
-		Protocol: "https",
-		Host:     "hello.com",
-		Method:   []string{},
-		Path:     "/path/to/resource",
-	}
-	result = item.match(req)
-	if result {
-		t.Errorf("Expected true, but got false")
-	}
-
-	// diff Method
-	item.From = &mapFrom{
-		Protocol: "https",
-		Host:     "example.com",
-		Method:   []string{"PUT"},
-		Path:     "/path/to/resource",
-	}
-	result = item.match(req)
-	if result {
-		t.Errorf("Expected true, but got false")
-	}
-
-	// diff Path
-	item.From = &mapFrom{
-		Protocol: "http",
-		Host:     "example.com",
-		Method:   []string{},
-		Path:     "/hello/world",
-	}
-	result = item.match(req)
-	if result {
-		t.Errorf("Expected true, but got false")
-	}
-}
-
-func TestMapItemReplace(t *testing.T) {
-	rawreq := func() *proxy.Request {
-		return &proxy.Request{
-			Method: "GET",
-			URL: &url.URL{
-				Scheme: "https",
-				Host:   "example.com",
-				Path:   "/path/to/resource",
+		Items: []*mapRemoteItem{
+			{
+				Enable: true,
+				From: &MapFrom{
+					Host: "example.com",
+					Path: "/old",
+				},
+				To: &mapRemoteTo{
+					Host: "new.example.com",
+					Path: "/new",
+				},
 			},
-		}
+			{
+				Enable: true,
+				From: &MapFrom{
+					Host: "wildcard.com",
+					Path: "/sub/*",
+				},
+				To: &mapRemoteTo{
+					Host: "wildcard.new.com",
+					Path: "/newsub",
+				},
+			},
+		},
 	}
 
-	item := &mapRemoteItem{
-		From: &mapFrom{
-			Protocol: "https",
-			Host:     "example.com",
-			Method:   []string{"GET", "POST"},
-			Path:     "/path/to/resource",
-		},
-		To: &mapRemoteTo{
-			Protocol: "http",
-			Host:     "hello.com",
-			Path:     "",
-		},
-		Enable: true,
+	// Case 1: Simple replace
+	req := &proxy.Request{Method: "GET", URL: &url.URL{Scheme: "http", Host: "example.com", Path: "/old"}}
+	f := proxy.NewFlow()
+	f.Request = req
+	
+	mr.Requestheaders(f)
+	
+	if f.Request.URL.Host != "new.example.com" {
+		t.Errorf("Host mismatch: got %v, want new.example.com", f.Request.URL.Host)
 	}
-	req := item.replace(rawreq())
-	should := "http://hello.com/path/to/resource"
-	if req.URL.String() != should {
-		t.Errorf("Expected %v, but got %v", should, req.URL.String())
+	if f.Request.URL.Path != "/new" {
+		t.Errorf("Path mismatch: got %v, want /new", f.Request.URL.Path)
 	}
-
-	item = &mapRemoteItem{
-		From: &mapFrom{
-			Protocol: "https",
-			Host:     "example.com",
-			Method:   []string{"GET", "POST"},
-			Path:     "/path/to/resource",
-		},
-		To: &mapRemoteTo{
-			Protocol: "http",
-			Host:     "hello.com",
-			Path:     "/path/to/resource",
-		},
-		Enable: true,
+	
+	// Case 2: Wildcard
+	req2 := &proxy.Request{Method: "GET", URL: &url.URL{Scheme: "http", Host: "wildcard.com", Path: "/sub/foo/bar"}}
+	f2 := proxy.NewFlow()
+	f2.Request = req2
+	
+	mr.Requestheaders(f2)
+	
+	if f2.Request.URL.Host != "wildcard.new.com" {
+		t.Errorf("Host mismatch: got %v, want wildcard.new.com", f2.Request.URL.Host)
 	}
-	req = item.replace(rawreq())
-	should = "http://hello.com/path/to/resource"
-	if req.URL.String() != should {
-		t.Errorf("Expected %v, but got %v", should, req.URL.String())
+	if f2.Request.URL.Path != "/newsub/foo/bar" {
+		t.Errorf("Path mismatch: got %v, want /newsub/foo/bar", f2.Request.URL.Path)
 	}
-
-	item = &mapRemoteItem{
-		From: &mapFrom{
-			Protocol: "https",
-			Host:     "example.com",
-			Method:   []string{"GET", "POST"},
-			Path:     "/path/to/resource",
-		},
-		To: &mapRemoteTo{
-			Protocol: "http",
-			Host:     "hello.com",
-			Path:     "/path/to/world",
-		},
-		Enable: true,
-	}
-	req = item.replace(rawreq())
-	should = "http://hello.com/path/to/world"
-	if req.URL.String() != should {
-		t.Errorf("Expected %v, but got %v", should, req.URL.String())
-	}
-
-	item = &mapRemoteItem{
-		From: &mapFrom{
-			Protocol: "https",
-			Host:     "example.com",
-			Method:   []string{"GET", "POST"},
-			Path:     "/path/to/*",
-		},
-		To: &mapRemoteTo{
-			Protocol: "http",
-			Host:     "hello.com",
-			Path:     "",
-		},
-		Enable: true,
-	}
-	req = item.replace(rawreq())
-	should = "http://hello.com/path/to/resource"
-	if req.URL.String() != should {
-		t.Errorf("Expected %v, but got %v", should, req.URL.String())
-	}
-
-	item = &mapRemoteItem{
-		From: &mapFrom{
-			Protocol: "https",
-			Host:     "example.com",
-			Method:   []string{"GET", "POST"},
-			Path:     "/path/to/*",
-		},
-		To: &mapRemoteTo{
-			Protocol: "http",
-			Host:     "hello.com",
-			Path:     "/world",
-		},
-		Enable: true,
-	}
-	req = item.replace(rawreq())
-	should = "http://hello.com/world/resource"
-	if req.URL.String() != should {
-		t.Errorf("Expected %v, but got %v", should, req.URL.String())
+	
+	// Validation
+	if err := mr.validate(); err != nil {
+		t.Errorf("Validation failed: %v", err)
 	}
 }

@@ -6,12 +6,35 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/proxy"
 	uuid "github.com/satori/go.uuid"
 	log "github.com/sirupsen/logrus"
 )
 
 // message:
+
+func newBytesBuffer(mType messageType) *bytes.Buffer {
+	buf := bytes.NewBuffer(make([]byte, 0))
+	buf.WriteByte(byte(messageVersion))
+	buf.WriteByte(byte(mType))
+	return buf
+}
+
+func writeHeadBody(buf *bytes.Buffer, header interface{}, body []byte) {
+	headerContent, err := json.Marshal(header)
+	if err != nil {
+		panic(err)
+	}
+	hl := make([]byte, 4)
+	binary.BigEndian.PutUint32(hl, (uint32)(len(headerContent)))
+	buf.Write(hl)
+	buf.Write(headerContent)
+
+	bl := make([]byte, 4)
+	binary.BigEndian.PutUint32(bl, (uint32)(len(body)))
+	buf.Write(bl)
+	buf.Write(body)
+}
 
 // type: 0/1/2/3/4/5
 // messageFlow
@@ -133,9 +156,7 @@ func newMessageConnClose(connCtx *proxy.ConnContext) *messageFlow {
 }
 
 func (m *messageFlow) bytes() []byte {
-	buf := bytes.NewBuffer(make([]byte, 0))
-	buf.WriteByte(byte(messageVersion))
-	buf.WriteByte(byte(m.mType))
+	buf := newBytesBuffer(m.mType)
 	buf.WriteString(m.id.String()) // len: 36
 	buf.WriteByte(m.waitIntercept)
 	buf.Write(m.content)
@@ -152,6 +173,7 @@ type messageEdit struct {
 func parseMessageEdit(data []byte) *messageEdit {
 	// 2 + 36
 	if len(data) < 38 {
+        log.Warnf("parseMessageEdit: len(data) %d < 38", len(data))
 		return nil
 	}
 
@@ -159,6 +181,7 @@ func parseMessageEdit(data []byte) *messageEdit {
 
 	id, err := uuid.FromString(string(data[2:38]))
 	if err != nil {
+        log.Warnf("parseMessageEdit: uuid error %v", err)
 		return nil
 	}
 
@@ -173,17 +196,20 @@ func parseMessageEdit(data []byte) *messageEdit {
 
 	// 2 + 36 + 4 + 4
 	if len(data) < 46 {
+        log.Warnf("parseMessageEdit: len(data) %d < 46", len(data))
 		return nil
 	}
 
 	hl := (int)(binary.BigEndian.Uint32(data[38:42]))
 	if 42+hl+4 > len(data) {
+        log.Warnf("parseMessageEdit: header len mismatch: 42+%d+4 > %d", hl, len(data))
 		return nil
 	}
 	headerContent := data[42 : 42+hl]
 
 	bl := (int)(binary.BigEndian.Uint32(data[42+hl : 42+hl+4]))
 	if 42+hl+4+bl != len(data) {
+        log.Warnf("parseMessageEdit: body len mismatch: 42+%d+4+%d != %d", hl, bl, len(data))
 		return nil
 	}
 	bodyContent := data[42+hl+4:]
@@ -192,6 +218,7 @@ func parseMessageEdit(data []byte) *messageEdit {
 		req := new(proxy.Request)
 		err := json.Unmarshal(headerContent, req)
 		if err != nil {
+            log.Warnf("parseMessageEdit: Unmarshal Request error %v", err)
 			return nil
 		}
 		req.Body = bodyContent
@@ -200,11 +227,13 @@ func parseMessageEdit(data []byte) *messageEdit {
 		res := new(proxy.Response)
 		err := json.Unmarshal(headerContent, res)
 		if err != nil {
+            log.Warnf("parseMessageEdit: Unmarshal Response error %v", err)
 			return nil
 		}
 		res.Body = bodyContent
 		msg.response = res
 	} else {
+        	log.Warnf("parseMessageEdit: invalid mType %v", mType)
 		return nil
 	}
 
@@ -212,39 +241,13 @@ func parseMessageEdit(data []byte) *messageEdit {
 }
 
 func (m *messageEdit) bytes() []byte {
-	buf := bytes.NewBuffer(make([]byte, 0))
-	buf.WriteByte(byte(messageVersion))
-	buf.WriteByte(byte(m.mType))
+	buf := newBytesBuffer(m.mType)
 	buf.WriteString(m.id.String()) // len: 36
 
 	if m.mType == messageTypeChangeRequest {
-		headerContent, err := json.Marshal(m.request)
-		if err != nil {
-			panic(err)
-		}
-		hl := make([]byte, 4)
-		binary.BigEndian.PutUint32(hl, (uint32)(len(headerContent)))
-		buf.Write(hl)
-
-		bodyContent := m.request.Body
-		bl := make([]byte, 4)
-		binary.BigEndian.PutUint32(bl, (uint32)(len(bodyContent)))
-		buf.Write(bl)
-		buf.Write(bodyContent)
+		writeHeadBody(buf, m.request, m.request.Body)
 	} else if m.mType == messageTypeChangeResponse {
-		headerContent, err := json.Marshal(m.response)
-		if err != nil {
-			panic(err)
-		}
-		hl := make([]byte, 4)
-		binary.BigEndian.PutUint32(hl, (uint32)(len(headerContent)))
-		buf.Write(hl)
-
-		bodyContent := m.response.Body
-		bl := make([]byte, 4)
-		binary.BigEndian.PutUint32(bl, (uint32)(len(bodyContent)))
-		buf.Write(bl)
-		buf.Write(bodyContent)
+		writeHeadBody(buf, m.response, m.response.Body)
 	}
 
 	return buf.Bytes()
@@ -270,9 +273,7 @@ func parseMessageMeta(data []byte) *messageMeta {
 }
 
 func (m *messageMeta) bytes() []byte {
-	buf := bytes.NewBuffer(make([]byte, 0))
-	buf.WriteByte(byte(messageVersion))
-	buf.WriteByte(byte(m.mType))
+	buf := newBytesBuffer(m.mType)
 
 	content, err := json.Marshal(m.breakPointRules)
 	if err != nil {
@@ -299,7 +300,11 @@ func parseMessage(data []byte) message {
 	mType := (messageType)(data[1])
 
 	if mType == messageTypeChangeRequest || mType == messageTypeChangeResponse || mType == messageTypeDropRequest || mType == messageTypeDropResponse {
-		return parseMessageEdit(data)
+		msg := parseMessageEdit(data)
+		if msg == nil {
+			return nil
+		}
+		return msg
 	} else if mType == messageTypeChangeBreakPointRules {
 		return parseMessageMeta(data)
 	} else {

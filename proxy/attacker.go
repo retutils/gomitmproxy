@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/lqqyt2423/go-mitmproxy/cert"
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
+	"github.com/retutils/gomitmproxy/cert"
+	"github.com/retutils/gomitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 )
@@ -142,7 +142,9 @@ func (a *attacker) serveConn(clientTlsConn *tls.Conn, connCtx *ConnContext) {
 func (a *attacker) ServeHTTP(res http.ResponseWriter, req *http.Request) {
 	if strings.EqualFold(req.Header.Get("Connection"), "Upgrade") && strings.EqualFold(req.Header.Get("Upgrade"), "websocket") {
 		// wss
-		defaultWebSocket.wss(res, req)
+		defaultWebSocket.wss(res, req, &tls.Config{
+			InsecureSkipVerify: a.proxy.Opts.SslInsecure,
+		})
 		return
 	}
 
@@ -417,38 +419,7 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 		"method": req.Method,
 	})
 
-	reply := func(response *Response, body io.Reader) {
-		if response.Header != nil {
-			for key, value := range response.Header {
-				for _, v := range value {
-					res.Header().Add(key, v)
-				}
-			}
-		}
-		if response.close {
-			res.Header().Add("Connection", "close")
-		}
-		res.WriteHeader(response.StatusCode)
 
-		if body != nil {
-			_, err := io.Copy(res, body)
-			if err != nil {
-				logErr(log, err)
-			}
-		}
-		if response.BodyReader != nil {
-			_, err := io.Copy(res, response.BodyReader)
-			if err != nil {
-				logErr(log, err)
-			}
-		}
-		if response.Body != nil && len(response.Body) > 0 {
-			_, err := res.Write(response.Body)
-			if err != nil {
-				logErr(log, err)
-			}
-		}
-	}
 
 	// when addons panic
 	defer func() {
@@ -457,10 +428,10 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 		}
 	}()
 
-	f := newFlow()
-	f.Request = newRequest(req)
+	f := NewFlow()
+	f.Request = NewRequest(req)
 	f.ConnContext = req.Context().Value(connContextKey).(*ConnContext)
-	defer f.finish()
+	defer f.Finish()
 
 	f.ConnContext.FlowCount.Add(1)
 
@@ -471,7 +442,7 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 	for _, addon := range proxy.Addons {
 		addon.Requestheaders(f)
 		if f.Response != nil {
-			reply(f.Response, nil)
+			a.reply(res, log, f.Response, nil)
 			return
 		}
 	}
@@ -497,7 +468,7 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 			for _, addon := range proxy.Addons {
 				addon.Request(f)
 				if f.Response != nil {
-					reply(f.Response, nil)
+					a.reply(res, log, f.Response, nil)
 					return
 				}
 			}
@@ -518,6 +489,9 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 	}
 
 	for key, value := range f.Request.Header {
+		if key == "Content-Length" {
+			continue
+		}
 		for _, v := range value {
 			proxyReq.Header.Add(key, v)
 		}
@@ -570,7 +544,7 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 	for _, addon := range proxy.Addons {
 		addon.Responseheaders(f)
 		if f.Response.Body != nil {
-			reply(f.Response, nil)
+			a.reply(res, log, f.Response, nil)
 			return
 		}
 	}
@@ -601,5 +575,41 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 		resBody = addon.StreamResponseModifier(f, resBody)
 	}
 
-	reply(f.Response, resBody)
+	a.reply(res, log, f.Response, resBody)
+}
+
+func (a *attacker) reply(res http.ResponseWriter, log *log.Entry, response *Response, body io.Reader) {
+	if response.Header != nil {
+		for key, value := range response.Header {
+			if key == "Content-Length" {
+				continue
+			}
+			for _, v := range value {
+				res.Header().Add(key, v)
+			}
+		}
+	}
+	if response.close {
+		res.Header().Add("Connection", "close")
+	}
+	res.WriteHeader(response.StatusCode)
+
+	if body != nil {
+		_, err := io.Copy(res, body)
+		if err != nil {
+			logErr(log, err)
+		}
+	}
+	if response.BodyReader != nil {
+		_, err := io.Copy(res, response.BodyReader)
+		if err != nil {
+			logErr(log, err)
+		}
+	}
+	if response.Body != nil && len(response.Body) > 0 {
+		_, err := res.Write(response.Body)
+		if err != nil {
+			logErr(log, err)
+		}
+	}
 }

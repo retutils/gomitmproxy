@@ -5,11 +5,9 @@ import (
 	"path"
 	"strings"
 
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
-	"github.com/samber/lo"
+	"github.com/retutils/gomitmproxy/internal/helper"
+	"github.com/retutils/gomitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
-	"github.com/tidwall/match"
 )
 
 // Path map rule:
@@ -19,29 +17,6 @@ import (
 //     /hello => /world
 //     /hello/abc => /world/abc
 
-type mapFrom struct {
-	Protocol string
-	Host     string
-	Method   []string
-	Path     string
-}
-
-func (mf *mapFrom) match(req *proxy.Request) bool {
-	if mf.Protocol != "" && mf.Protocol != req.URL.Scheme {
-		return false
-	}
-	if mf.Host != "" && mf.Host != req.URL.Host {
-		return false
-	}
-	if len(mf.Method) > 0 && !lo.Contains(mf.Method, req.Method) {
-		return false
-	}
-	if mf.Path != "" && !match.Match(req.URL.Path, mf.Path) {
-		return false
-	}
-	return true
-}
-
 type mapRemoteTo struct {
 	Protocol string
 	Host     string
@@ -49,7 +24,7 @@ type mapRemoteTo struct {
 }
 
 type mapRemoteItem struct {
-	From   *mapFrom
+	From   *MapFrom
 	To     *mapRemoteTo
 	Enable bool
 }
@@ -58,7 +33,7 @@ func (item *mapRemoteItem) match(req *proxy.Request) bool {
 	if !item.Enable {
 		return false
 	}
-	return item.From.match(req)
+	return item.From.Match(req)
 }
 
 func (item *mapRemoteItem) replace(req *proxy.Request) *proxy.Request {
@@ -106,8 +81,8 @@ func (mr *MapRemote) validate() error {
 		if item.From == nil {
 			return fmt.Errorf("%v no item.From", i)
 		}
-		if item.From.Protocol != "" && item.From.Protocol != "http" && item.From.Protocol != "https" {
-			return fmt.Errorf("%v invalid item.From.Protocol %v", i, item.From.Protocol)
+		if err := item.From.Validate(); err != nil {
+			return fmt.Errorf("%v %w", i, err)
 		}
 		if item.To == nil {
 			return fmt.Errorf("%v no item.To", i)

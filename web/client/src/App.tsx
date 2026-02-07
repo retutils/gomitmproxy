@@ -220,7 +220,7 @@ class App extends React.Component<IProps, IState> {
               </Form.Control>
               <span style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
 
-                <a href='https://github.com/lqqyt2423/go-mitmproxy/blob/main/docs/web-filter-rules_CN.md' target='_blank' rel="noreferrer">
+                <a href='https://github.com/retutils/gomitmproxy/blob/main/docs/web-filter-rules_CN.md' target='_blank' rel="noreferrer">
                   <span style={{
                     display: 'inline-block',
                     width: '16px',
@@ -250,7 +250,7 @@ class App extends React.Component<IProps, IState> {
             <div style={{ marginRight: '10px' }}>
               {this.state.wsStatus === 'open' ? <Badge pill bg="success">on</Badge> : <Badge pill bg="danger">off</Badge>}
             </div>
-            <a href='https://github.com/lqqyt2423/go-mitmproxy' target='_blank' rel="noreferrer"><img style={{ height: '30px' }} src={GitHubLogo} alt="GitHub Logo" /></a>
+            <a href='https://github.com/retutils/gomitmproxy' target='_blank' rel="noreferrer"><img style={{ height: '30px' }} src={GitHubLogo} alt="GitHub Logo" /></a>
           </div>
         </div>
 

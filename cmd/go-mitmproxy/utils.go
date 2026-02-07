@@ -6,6 +6,7 @@ import (
 	log "github.com/sirupsen/logrus"
 	"net/http"
 	"strings"
+    "fmt"
 )
 
 type DefaultBasicAuth struct {
@@ -13,18 +14,18 @@ type DefaultBasicAuth struct {
 }
 
 // Create a new BasicAuth instance from a user:password string
-func NewDefaultBasicAuth(auth string) *DefaultBasicAuth {
+func NewDefaultBasicAuth(auth string) (*DefaultBasicAuth, error) {
 	basicAuth := &DefaultBasicAuth{
 		Auth: make(map[string]string),
 	}
 	for _, e := range strings.Split(auth, "|") {
 		n := strings.SplitN(e, ":", 2)
 		if len(n) != 2 {
-			log.Fatalf("Invalid proxy auth format: %s, expected user:pass", e)
+			return nil, fmt.Errorf("Invalid proxy auth format: %s, expected user:pass", e)
 		}
 		basicAuth.Auth[n[0]] = n[1]
 	}
-	return basicAuth
+	return basicAuth, nil
 }
 
 // Validate proxy authentication

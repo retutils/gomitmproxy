@@ -7,10 +7,10 @@ import (
 	"os"
 	"strings"
 
-	"github.com/lqqyt2423/go-mitmproxy/addon"
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
-	"github.com/lqqyt2423/go-mitmproxy/web"
+	"github.com/retutils/gomitmproxy/addon"
+	"github.com/retutils/gomitmproxy/internal/helper"
+	"github.com/retutils/gomitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/web"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -95,7 +95,10 @@ func main() {
 
 	if config.ProxyAuth != "" && strings.ToLower(config.ProxyAuth) != "any" {
 		log.Infoln("Enable entry authentication")
-		auth := NewDefaultBasicAuth(config.ProxyAuth)
+		auth, err := NewDefaultBasicAuth(config.ProxyAuth)
+        if err != nil {
+            log.Fatal(err)
+        }
 		p.SetAuthProxy(auth.EntryAuth)
 	}
 
