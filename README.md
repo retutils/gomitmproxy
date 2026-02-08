@@ -84,6 +84,10 @@ Usage of go-mitmproxy:
     	Save client fingerprint to file with specified name
   -ssl_insecure
     	not verify upstream server SSL/TLS certificates.
+  -storage_dir string
+    	Directory to store captured flows (DuckDB + Bleve)
+  -search string
+        Search query for stored flows (requires -storage_dir)
   -tls_fingerprint string
         TLS fingerprint to emulate (chrome, firefox, ios, android, edge, 360, qq, random, client)
   -upstream string
@@ -125,6 +129,28 @@ You can capture and save a real client's fingerprint to use later.
    ```bash
    go-mitmproxy -tls_fingerprint my_chrome_profile
    ```
+
+## Flow Storage & Search
+
+`go-mitmproxy` supports persistent storage of intercepted flows using **DuckDB** and **Bleve**. This allows for saving traffic history and performing full-text search on requests and responses, which is useful for security analysis.
+
+### Enable Storage
+Start the proxy with a storage directory:
+```bash
+go-mitmproxy -storage_dir ./mitm-data
+```
+
+### Search Flows
+Index query syntax supports field-specific searches. 
+Available fields: `Method`, `URL`, `Status`, `ReqBody`, `ResBody`, `ReqHeader`, `ResHeader`.
+
+**Examples**:
+- Find all POST requests:
+  `go-mitmproxy -storage_dir ./mitm-data -search "Method:POST"`
+- Find requests with specific header value:
+  `go-mitmproxy -storage_dir ./mitm-data -search "ReqHeader.Content-Type:json"`
+- Find "password" in request body:
+  `go-mitmproxy -storage_dir ./mitm-data -search "ReqBody:password"`
 
 ## Importing as a package for developing functionalities
 

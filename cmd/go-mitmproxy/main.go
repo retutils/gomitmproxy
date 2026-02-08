@@ -10,6 +10,7 @@ import (
 	"github.com/retutils/gomitmproxy/addon"
 	"github.com/retutils/gomitmproxy/internal/helper"
 	"github.com/retutils/gomitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/storage"
 	"github.com/retutils/gomitmproxy/web"
 	log "github.com/sirupsen/logrus"
 )
@@ -38,6 +39,8 @@ type Config struct {
 	TlsFingerprint string // TLS fingerprint to emulate (chrome, firefox, ios, or random)
 	FingerprintSave string // Save decoding client hello to file
 	FingerprintList bool   // List saved fingerprints
+	StorageDir      string // Directory to store captured flows (DuckDB + Bleve)
+	Search          string // Search query for stored flows
 }
 
 func main() {
@@ -54,6 +57,38 @@ func main() {
 			fmt.Println("Saved fingerprints:")
 			for _, name := range names {
 				fmt.Printf(" - %s\n", name)
+			}
+		}
+		os.Exit(0)
+	}
+
+	if config.Search != "" {
+		if config.StorageDir == "" {
+			fmt.Println("-storage_dir is required for search")
+			os.Exit(1)
+		}
+
+		// Initialize service in read-only mode if possible, but NewService opens both
+		// For CLI search, we just need to init, search, print, exit
+		svc, err := storage.NewService(config.StorageDir)
+		if err != nil {
+			log.Fatalf("Failed to open storage: %v", err)
+		}
+		defer svc.Close()
+
+		results, err := svc.Search(config.Search)
+		if err != nil {
+			log.Fatalf("Search failed: %v", err)
+		}
+
+		if len(results) == 0 {
+			fmt.Println("No results found.")
+		} else {
+			fmt.Printf("Found %d results:\n", len(results))
+			for _, entry := range results {
+				fmt.Printf("[%s] %s %s (Status: %d)\n", entry.ID, entry.Method, entry.URL, entry.StatusCode)
+				// Maybe print snippets or headers if verbose? 
+				// For now just ID and URL is proof of concept
 			}
 		}
 		os.Exit(0)
@@ -153,6 +188,16 @@ func main() {
 	if config.Dump != "" {
 		dumper := addon.NewDumperWithFilename(config.Dump, config.DumpLevel)
 		p.AddAddon(dumper)
+	}
+
+	if config.StorageDir != "" {
+		storageAddon, err := addon.NewStorageAddon(config.StorageDir)
+		if err != nil {
+			log.Fatalf("failed to init storage: %v", err)
+		}
+		p.AddAddon(storageAddon)
+		defer storageAddon.Close()
+		log.Infof("Flow storage enabled in: %s", config.StorageDir)
 	}
 
 	log.Fatal(p.Start())

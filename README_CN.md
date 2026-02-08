@@ -85,6 +85,10 @@ Usage of go-mitmproxy:
     	将客户端指纹保存到文件 (指定名称)
   -ssl_insecure
     	不验证上游服务器的 SSL/TLS 证书
+  -storage_dir string
+    	存储捕获流量的目录 (DuckDB + Bleve)
+  -search string
+        搜索存储流量的查询语句 (需要 -storage_dir)
   -tls_fingerprint string
     	模拟的 TLS 指纹 (chrome, firefox, ios, android, edge, 360, qq, random, client)
   -upstream string
@@ -126,6 +130,28 @@ Usage of go-mitmproxy:
    ```bash
    go-mitmproxy -tls_fingerprint my_chrome_profile
    ```
+
+## 流量存储与搜索
+
+`go-mitmproxy` 支持使用 **DuckDB** 和 **Bleve** 持久化存储拦截的流量。这允许保存流量历史记录并对请求和响应执行全文搜索，这对于安全分析非常有用。
+
+### 启用存储
+使用存储目录启动代理：
+```bash
+go-mitmproxy -storage_dir ./mitm-data
+```
+
+### 搜索流量
+索引查询语法支持特定字段的搜索。
+可用字段: `Method`, `URL`, `Status`, `ReqBody`, `ResBody`, `ReqHeader`, `ResHeader`。
+
+**示例**:
+- 查找所有 POST 请求:
+  `go-mitmproxy -storage_dir ./mitm-data -search "Method:POST"`
+- 查找具有特定头部值的请求:
+  `go-mitmproxy -storage_dir ./mitm-data -search "ReqHeader.Content-Type:json"`
+- 在请求体中查找 "password":
+  `go-mitmproxy -storage_dir ./mitm-data -search "ReqBody:password"`
 
 ## 作为包引入开发功能
 
