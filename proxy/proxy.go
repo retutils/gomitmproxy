@@ -22,6 +22,8 @@ type Options struct {
 	NewCaFunc         func() (cert.CA, error) //创建 Ca 的函数
 	Upstream          string
 	LogFilePath       string // Path to write logs to file
+	TlsFingerprint    string // TLS fingerprint to emulate (chrome, firefox, ios, or random)
+	FingerprintSave   string // Save decoding client hello to file
 }
 
 type Proxy struct {

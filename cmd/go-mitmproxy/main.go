@@ -34,12 +34,30 @@ type Config struct {
 
 	filename string // read config from the filename
 
-	ProxyAuth string // Require proxy authentication
-
+	ProxyAuth      string // Require proxy authentication
+	TlsFingerprint string // TLS fingerprint to emulate (chrome, firefox, ios, or random)
+	FingerprintSave string // Save decoding client hello to file
+	FingerprintList bool   // List saved fingerprints
 }
 
 func main() {
 	config := loadConfig()
+
+	if config.FingerprintList {
+		names, err := proxy.ListFingerprints()
+		if err != nil {
+			log.Fatal(err)
+		}
+		if len(names) == 0 {
+			fmt.Println("No saved fingerprints found.")
+		} else {
+			fmt.Println("Saved fingerprints:")
+			for _, name := range names {
+				fmt.Printf(" - %s\n", name)
+			}
+		}
+		os.Exit(0)
+	}
 
 	if config.Debug > 0 {
 		rawLog.SetFlags(rawLog.LstdFlags | rawLog.Lshortfile)
@@ -63,6 +81,8 @@ func main() {
 		CaRootPath:        config.CertPath,
 		Upstream:          config.Upstream,
 		LogFilePath:       config.LogFile,
+		TlsFingerprint:    config.TlsFingerprint,
+		FingerprintSave:   config.FingerprintSave,
 	}
 
 	p, err := proxy.NewProxy(opts)

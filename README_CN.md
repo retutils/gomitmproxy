@@ -21,12 +21,13 @@
 - HTTPS 证书相关逻辑与 [mitmproxy](https://mitmproxy.org/) 兼容，并保存在 `~/.mitmproxy` 文件夹中。如果之前已经用过 `mitmproxy` 并安装信任了根证书，则 `go-mitmproxy` 可以直接使用。
 - 支持 Map Remote 和 Map Local。
 - 支持 HTTP/2
+- 支持 WebSocket 协议解析
 - 更多功能请参考[配置文档](#更多参数)。
 
 ## 暂未实现的功能
 
 - 只支持客户端显示设置代理，不支持透明代理模式。
-- 暂不支持 websocket 协议解析。
+
 
 > 如需了解显示设置代理和透明代理模式的区别，请参考 Python 版本的 mitmproxy 文档：[How mitmproxy works](https://docs.mitmproxy.org/stable/concepts-howmitmproxyworks/)。`go-mitmproxy` 目前支持文中提到的『Explicit HTTP』和『Explicit HTTPS』。
 
@@ -78,8 +79,14 @@ Usage of go-mitmproxy:
     	map remote json配置文件地址
   -proxyauth string
         启用代理认证。格式："user:pass"、"user1:pass1|user2:pass2"，或使用 "any" 允许所有用户
+  -fingerprint_list
+    	列出已保存的客户端指纹
+  -fingerprint_save string
+    	将客户端指纹保存到文件 (指定名称)
   -ssl_insecure
     	不验证上游服务器的 SSL/TLS 证书
+  -tls_fingerprint string
+    	模拟的 TLS 指纹 (chrome, firefox, ios, android, edge, 360, qq, random, client)
   -upstream string
     	upstream proxy
   -upstream_cert
@@ -89,6 +96,36 @@ Usage of go-mitmproxy:
   -web_addr string
     	web 界面监听地址 (默认值为 ":9081")
 ```
+
+## TLS 指纹模拟
+
+`go-mitmproxy` 支持 TLS 指纹模拟，可以在连接上游服务器时伪装成特定的浏览器或客户端。这对于绕过基于指纹的检测系统非常有用。
+
+### 支持的预设
+- chrome, firefox, edge, safari, 360, qq
+- ios, android
+- random (随机)
+- client (镜像当前连接客户端的指纹)
+
+### 自定义指纹
+
+你可以捕捉并保存真实客户端的指纹以供日后使用。
+
+1. **捕捉**: 以捕捉模式启动代理，并通过它发起请求：
+   ```bash
+   go-mitmproxy -fingerprint_save my_chrome_profile
+   ```
+   *(指纹将被保存到 `~/.mitmproxy/fingerprints/my_chrome_profile.json`)*
+
+2. **列表**: 查看已保存的指纹：
+   ```bash
+   go-mitmproxy -fingerprint_list
+   ```
+
+3. **使用**: 使用保存的指纹启动代理：
+   ```bash
+   go-mitmproxy -tls_fingerprint my_chrome_profile
+   ```
 
 ## 作为包引入开发功能
 
@@ -158,6 +195,12 @@ type Addon interface {
 
 	// 流式响应体修改器
 	StreamResponseModifier(*Flow, io.Reader) io.Reader
+
+	// WebSocket 连接建立（握手完成）
+	WebsocketHandshake(*Flow)
+
+	// WebSocket 收到消息
+	WebsocketMessage(*Flow, *WebSocketMessage)
 }
 ```
 

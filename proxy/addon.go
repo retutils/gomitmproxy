@@ -44,6 +44,12 @@ type Addon interface {
 
 	// onAccessProxyServer
 	AccessProxyServer(req *http.Request, res http.ResponseWriter)
+
+	// WebSocket connection established (handshake complete)
+	WebsocketHandshake(*Flow)
+
+	// WebSocket message received from client
+	WebsocketMessage(*Flow, *WebSocketMessage)
 }
 
 // BaseAddon do nothing
@@ -61,6 +67,8 @@ func (addon *BaseAddon) Response(*Flow)                                         
 func (addon *BaseAddon) StreamRequestModifier(f *Flow, in io.Reader) io.Reader        { return in }
 func (addon *BaseAddon) StreamResponseModifier(f *Flow, in io.Reader) io.Reader       { return in }
 func (addon *BaseAddon) AccessProxyServer(req *http.Request, res http.ResponseWriter) {}
+func (addon *BaseAddon) WebsocketHandshake(f *Flow)                                   {}
+func (addon *BaseAddon) WebsocketMessage(f *Flow, msg *WebSocketMessage)              {}
 
 // LogAddon log connection and flow
 type LogAddon struct {
@@ -98,6 +106,14 @@ func (addon *LogAddon) Requestheaders(f *Flow) {
 		}
 		log.Infof("%v %v %v %v %v - %v ms\n", f.ConnContext.ClientConn.Conn.RemoteAddr(), f.Request.Method, f.Request.URL.String(), StatusCode, contentLen, time.Since(start).Milliseconds())
 	}()
+}
+
+func (addon *LogAddon) WebsocketHandshake(f *Flow) {
+	log.Infof("%v websocket handshake %v %v\n", f.ConnContext.ClientConn.Conn.RemoteAddr(), f.Request.Method, f.Request.URL.String())
+}
+
+func (addon *LogAddon) WebsocketMessage(f *Flow, msg *WebSocketMessage) {
+	log.Debugf("%v websocket msg %v %v %v\n", f.ConnContext.ClientConn.Conn.RemoteAddr(), msg.FromClient, msg.Type, len(msg.Data))
 }
 
 type UpstreamCertAddon struct {

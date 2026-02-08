@@ -26,7 +26,7 @@
 ## Unsupported features
 
 - Only supports setting the proxy manually in the client, not transparent proxy mode.
-- Currently does not support WebSocket protocol parsing.
+
 
 > For more information on the difference between manually setting a proxy and transparent proxy mode, please refer to the mitmproxy documentation for the Python version: [How mitmproxy works](https://docs.mitmproxy.org/stable/concepts-howmitmproxyworks/). go-mitmproxy currently supports "Explicit HTTP" and "Explicit HTTPS" as mentioned in the article.
 
@@ -78,8 +78,14 @@ Usage of go-mitmproxy:
     	map remote config filename
   -proxyauth string
         enable proxy authentication. Format: "username:pass", "user1:pass1|user2:pass2","any" to accept any user/pass combination
+  -fingerprint_list
+    	List saved client fingerprints
+  -fingerprint_save string
+    	Save client fingerprint to file with specified name
   -ssl_insecure
     	not verify upstream server SSL/TLS certificates.
+  -tls_fingerprint string
+        TLS fingerprint to emulate (chrome, firefox, ios, android, edge, 360, qq, random, client)
   -upstream string
     	upstream proxy
   -upstream_cert
@@ -89,6 +95,36 @@ Usage of go-mitmproxy:
   -web_addr string
     	web interface listen addr (default ":9081")
 ```
+
+## TLS Fingerprinting
+
+`go-mitmproxy` supports TLS fingerprint spoofing to mimic specific browsers or clients when connecting to upstream servers. This is useful for avoiding detection by fingerprint-based blocking systems.
+
+### Supported Presets
+- chrome, firefox, edge, safari, 360, qq
+- ios, android
+- random
+- client (mirrors the connected client's fingerprint)
+
+### Custom Fingerprints
+
+You can capture and save a real client's fingerprint to use later.
+
+1. **Capture**: Start the proxy in capture mode and make a request through it with your desired client:
+   ```bash
+   go-mitmproxy -fingerprint_save my_chrome_profile
+   ```
+   *(This saves the fingerprint to `~/.mitmproxy/fingerprints/my_chrome_profile.json`)*
+
+2. **List**: View saved fingerprints:
+   ```bash
+   go-mitmproxy -fingerprint_list
+   ```
+
+3. **Use**: Start the proxy using the saved fingerprint:
+   ```bash
+   go-mitmproxy -tls_fingerprint my_chrome_profile
+   ```
 
 ## Importing as a package for developing functionalities
 
@@ -158,6 +194,12 @@ type Addon interface {
 
 	// Stream response body modifier
 	StreamResponseModifier(*Flow, io.Reader) io.Reader
+
+	// WebSocket connection established (handshake complete)
+	WebsocketHandshake(*Flow)
+
+	// WebSocket message received from client
+	WebsocketMessage(*Flow, *WebSocketMessage)
 }
 ```
 

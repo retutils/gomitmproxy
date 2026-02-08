@@ -37,6 +37,9 @@ func loadConfigFromCli() *Config {
 	flag.StringVar(&config.filename, "f", "", "read config from the filename")
 
 	flag.StringVar(&config.ProxyAuth, "proxyauth", "", `enable proxy authentication. Format: "username:pass", "user1:pass1|user2:pass2","any" to accept any user/pass combination`)
+	flag.StringVar(&config.TlsFingerprint, "tls_fingerprint", "", "TLS fingerprint to emulate (chrome, firefox, ios, android, edge, 360, qq, random)")
+	flag.StringVar(&config.FingerprintSave, "fingerprint_save", "", "Save client fingerprint to file with specified name")
+	flag.BoolVar(&config.FingerprintList, "fingerprint_list", false, "List saved client fingerprints")
 	flag.Parse()
 
 	return config
@@ -86,6 +89,15 @@ func mergeConfigs(fileConfig, cliConfig *Config) *Config {
 	}
 	if cliConfig.LogFile != "" {
 		config.LogFile = cliConfig.LogFile
+	}
+	if cliConfig.TlsFingerprint != "" {
+		config.TlsFingerprint = cliConfig.TlsFingerprint
+	}
+	if cliConfig.FingerprintSave != "" {
+		config.FingerprintSave = cliConfig.FingerprintSave
+	}
+	if cliConfig.FingerprintList {
+		config.FingerprintList = cliConfig.FingerprintList
 	}
 	return config
 }
