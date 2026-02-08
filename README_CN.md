@@ -12,157 +12,175 @@
 
 [English](./README.md)
 
-`go-mitmproxy` 是一个用 Golang 实现的 [mitmproxy](https://mitmproxy.org/)，支持中间人攻击（Man-in-the-middle）并解析、监测、篡改 HTTP/HTTPS 流量。
+# go-mitmproxy
 
-## 主要功能
+<div align="center" markdown="1">
+   <a href="https://apps.apple.com/cn/app/sqlman-mysql-gui-%E6%95%B0%E6%8D%AE%E5%BA%93%E5%AE%A2%E6%88%B7%E7%AB%AF/id6498632117?mt=12">
+     <img src="./assets/sqlman-cn.png" alt="sqlman" width="650"/>
+   </a>
 
-- 解析 HTTP/HTTPS 流量，可通过 [WEB 界面](#web-界面)查看流量详情。
-- 支持[插件机制](#通过开发插件添加功能)，方便扩展自己需要的功能。多种事件 HOOK 可参考 [examples](./examples)。
-- HTTPS 证书相关逻辑与 [mitmproxy](https://mitmproxy.org/) 兼容，并保存在 `~/.mitmproxy` 文件夹中。如果之前已经用过 `mitmproxy` 并安装信任了根证书，则 `go-mitmproxy` 可以直接使用。
-- 支持 Map Remote 和 Map Local。
-- 支持 HTTP/2
-- 支持 WebSocket 协议解析
-- 更多功能请参考[配置文档](#更多参数)。
+[欢迎使用作者开发的软件：Sqlman - MySQL GUI 数据库客户端](https://apps.apple.com/cn/app/sqlman-mysql-gui-%E6%95%B0%E6%8D%AE%E5%BA%93%E5%AE%A2%E6%88%B7%E7%AB%AF/id6498632117?mt=12)
+<br>
 
-## 暂未实现的功能
+</div>
 
-- 只支持客户端显示设置代理，不支持透明代理模式。
+[English](./README.md)
 
+`go-mitmproxy` 是一个功能强大的 [mitmproxy](https://mitmproxy.org/) Golang 实现。它是一个通用的工具，用于拦截、检查、修改和重放 HTTP/HTTPS 流量。它支持强大的插件系统，可以通过 Go 轻松扩展功能。
 
-> 如需了解显示设置代理和透明代理模式的区别，请参考 Python 版本的 mitmproxy 文档：[How mitmproxy works](https://docs.mitmproxy.org/stable/concepts-howmitmproxyworks/)。`go-mitmproxy` 目前支持文中提到的『Explicit HTTP』和『Explicit HTTPS』。
+## ✨ 主要功能
 
-## 命令行工具
+- **流量拦截**: 具有完整的中间人 (MITM) 能力，可拦截 HTTP 和 HTTPS 流量。
+- **Web 界面**: 内置 Web UI（默认端口 9081），用于实时流量监控和检查。
+- **插件系统**: 高度可扩展的架构，允许编写 Go 插件通过 `Addon` 接口实时修改请求/响应。
+- **TLS 指纹模拟**: 模拟不同的浏览器指纹 (JA3/JA4) 以规避反爬虫检测。
+- **流量存储与搜索**: 将拦截的流量保存到磁盘 (DuckDB) 并支持本地全文搜索 (Bleve)。
+- **Map Remote (远程映射)**: 根据规则重写请求 URL 以重定向流量到不同的目标。
+- **Map Local (本地映射)**: 针对特定请求直接服务本地文件，而不是从远程服务器获取。
+- **HTTP/2 支持**: 完全兼容 HTTP/2 协议。
+- **证书管理**: 自动生成和管理 CA 证书，与 mitmproxy 兼容。
 
-### 安装
+## 📦 安装
+
+### 使用 `go install` (推荐)
 
 ```bash
 go install github.com/retutils/gomitmproxy/cmd/go-mitmproxy@latest
 ```
 
-### 使用
+### 源码编译
 
-使用以下命令启动 go-mitmproxy 代理服务器：
+```bash
+git clone https://github.com/retutils/gomitmproxy.git
+cd gomitmproxy
+go mod tidy
+go build -o go-mitmproxy ./cmd/go-mitmproxy
+```
+
+## 🚀 命令行使用
+
+使用默认设置启动代理服务器（代理：:9080，Web UI：:9081）：
 
 ```bash
 go-mitmproxy
 ```
 
-启动后，HTTP 代理地址默认为 9080 端口，Web 界面默认在 9081 端口。
+### 常用参数
 
-首次启动后需安装证书以解析 HTTPS 流量，证书会在首次启动命令后自动生成，路径为 `~/.mitmproxy/mitmproxy-ca-cert.pem`。安装步骤可参考 Python mitmproxy 文档：[About Certificates](https://docs.mitmproxy.org/stable/concepts-certificates/)。
+| 参数 | 描述 | 默认值 |
+|------|-------------|---------|
+| `-addr` | 代理监听地址 | `:9080` |
+| `-web_addr` | Web 界面监听地址 | `:9081` |
+| `-ssl_insecure` | 跳过上游证书验证 | `false` |
+| `-storage_dir` | 捕获流量的保存目录 | `""` |
+| `-tls_fingerprint` | 要模拟的 TLS 指纹 (chrome, firefox, ios, random) | `""` |
+| `-map_local` | Map Local 配置文件路径 (JSON) | `""` |
+| `-map_remote` | Map Remote 配置文件路径 (JSON) | `""` |
+| `-dump` | 将流量转储到文件 | `""` |
+| `-proxyauth` | 代理的基础认证 (user:pass) | `""` |
 
-### 更多参数
-
-可以使用以下命令查看 go-mitmproxy 的更多参数：
+查看所有可用选项：
 
 ```bash
 go-mitmproxy -h
 ```
 
-```txt
-Usage of go-mitmproxy:
-  -addr string
-    	代理监听地址 (默认值为 ":9080")
-  -allow_hosts []string
-    	HTTPS解析域名白名单
-  -cert_path string
-    	生成证书文件路径
-  -debug int
-    	调试模式：1-打印调试日志，2-显示调试来源
-  -f string
-    	从文件名读取配置，传入json配置文件地址
-  -ignore_hosts value
-    	HTTPS解析域名黑名单
-  -map_local string
-    	map local json配置文件地址
-  -map_remote string
-    	map remote json配置文件地址
-  -proxyauth string
-        启用代理认证。格式："user:pass"、"user1:pass1|user2:pass2"，或使用 "any" 允许所有用户
-  -fingerprint_list
-    	列出已保存的客户端指纹
-  -fingerprint_save string
-    	将客户端指纹保存到文件 (指定名称)
-  -ssl_insecure
-    	不验证上游服务器的 SSL/TLS 证书
-  -storage_dir string
-    	存储捕获流量的目录 (DuckDB + Bleve)
-  -search string
-        搜索存储流量的查询语句 (需要 -storage_dir)
-  -tls_fingerprint string
-    	模拟的 TLS 指纹 (chrome, firefox, ios, android, edge, 360, qq, random, client)
-  -upstream string
-    	upstream proxy
-  -upstream_cert
-    	connect to upstream server to look up certificate details (default true)
-  -version
-    	显示 go-mitmproxy 版本
-  -web_addr string
-    	web 界面监听地址 (默认值为 ":9081")
-```
+### 证书设置
+首次运行后，CA 证书将在 `~/.mitmproxy/mitmproxy-ca-cert.pem` 生成。您必须在客户端设备上安装并信任此证书才能拦截 HTTPS 流量。安装说明请参阅 [mitmproxy 文档](https://docs.mitmproxy.org/stable/concepts-certificates/)。
 
-## TLS 指纹模拟
+## 🛠 功能详情
 
-`go-mitmproxy` 支持 TLS 指纹模拟，可以在连接上游服务器时伪装成特定的浏览器或客户端。这对于绕过基于指纹的检测系统非常有用。
+### 1. TLS 指纹模拟
+通过模仿真实浏览器来规避基于指纹的屏蔽。
 
-### 支持的预设
-- chrome, firefox, edge, safari, 360, qq
-- ios, android
-- random (随机)
-- client (镜像当前连接客户端的指纹)
-
-### 自定义指纹
-
-你可以捕捉并保存真实客户端的指纹以供日后使用。
-
-1. **捕捉**: 以捕捉模式启动代理，并通过它发起请求：
-   ```bash
-   go-mitmproxy -fingerprint_save my_chrome_profile
-   ```
-   *(指纹将被保存到 `~/.mitmproxy/fingerprints/my_chrome_profile.json`)*
-
-2. **列表**: 查看已保存的指纹：
-   ```bash
-   go-mitmproxy -fingerprint_list
-   ```
-
-3. **使用**: 使用保存的指纹启动代理：
-   ```bash
-   go-mitmproxy -tls_fingerprint my_chrome_profile
-   ```
-
-## 流量存储与搜索
-
-`go-mitmproxy` 支持使用 **DuckDB** 和 **Bleve** 持久化存储拦截的流量。这允许保存流量历史记录并对请求和响应执行全文搜索，这对于安全分析非常有用。
-
-### 启用存储
-使用存储目录启动代理：
+**使用:**
 ```bash
-go-mitmproxy -storage_dir ./mitm-data
+go-mitmproxy -tls_fingerprint chrome
+```
+支持的预设: `chrome`, `firefox`, `edge`, `safari`, `360`, `qq`, `ios`, `android`, `random`, `client`.
+
+**自定义指纹:**
+您可以捕获真实指纹并在以后使用。
+1. **捕获**: `go-mitmproxy -fingerprint_save my_fingerprint`
+2. **列表**: `go-mitmproxy -fingerprint_list`
+3. **使用**: `go-mitmproxy -tls_fingerprint my_fingerprint`
+
+### 2. 流量存储与搜索
+使用本地数据库 DuckDB 和 Bleve 持久化流量历史并进行搜索。
+
+**启用存储:**
+```bash
+go-mitmproxy -storage_dir ./data
 ```
 
-### 搜索流量
-索引查询语法支持特定字段的搜索。
+**搜索:**
+您可以使用有效的 Bleve 查询语法搜索存储的流。
 可用字段: `Method`, `URL`, `Status`, `ReqBody`, `ResBody`, `ReqHeader`, `ResHeader`。
 
-**示例**:
-- 查找所有 POST 请求:
-  `go-mitmproxy -storage_dir ./mitm-data -search "Method:POST"`
-- 查找具有特定头部值的请求:
-  `go-mitmproxy -storage_dir ./mitm-data -search "ReqHeader.Content-Type:json"`
-- 在请求体中查找 "password":
-  `go-mitmproxy -storage_dir ./mitm-data -search "ReqBody:password"`
+```bash
+# 搜索特定端点的 POST 请求
+go-mitmproxy -storage_dir ./data -search "Method:POST +URL:api"
 
-## 作为包引入开发功能
+# 搜索特定头部值
+go-mitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
+```
 
-### 简单示例
+### 3. Map Remote (远程映射)
+根据规则将请求位置重写为不同的目标。
 
-```golang
+**配置文件 (`map_remote.json`):**
+```json
+{
+  "enable": true,
+  "items": [
+    {
+      "from": { "path": "/old-api/*" },
+      "to": {
+        "protocol": "https",
+        "host": "new-api.example.com",
+        "path": "/v2/"
+      },
+      "enable": true
+    }
+  ]
+}
+```
+**运行:** `go-mitmproxy -map_remote map_remote.json`
+
+### 4. Map Local (本地映射)
+为特定请求服务本地文件。
+
+**配置文件 (`map_local.json`):**
+```json
+{
+  "enable": true,
+  "items": [
+    {
+      "from": { "url": "https://example.com/style.css" },
+      "to": { "path": "./local_style.css" },
+      "enable": true
+    },
+    {
+      "from": { "path": "/static/*" },
+      "to": { "path": "./local_static_dir" },
+      "enable": true
+    }
+  ]
+}
+```
+**运行:** `go-mitmproxy -map_local map_local.json`
+
+## 📚 库使用
+
+您可以将 `go-mitmproxy` 用作库来构建自定义代理工具。
+
+### 基础示例
+
+```go
 package main
 
 import (
 	"log"
-
 	"github.com/retutils/gomitmproxy/proxy"
 )
 
@@ -170,6 +188,7 @@ func main() {
 	opts := &proxy.Options{
 		Addr:              ":9080",
 		StreamLargeBodies: 1024 * 1024 * 5,
+        SslInsecure:       true,
 	}
 
 	p, err := proxy.NewProxy(opts)
@@ -181,100 +200,43 @@ func main() {
 }
 ```
 
-### 通过开发插件添加功能
+### 开发自定义 Addons (插件)
 
-参考示例 [examples](./examples)，可通过自己实现 `AddAddon` 方法添加自己实现的插件。
+通过实现 `Addon` 接口扩展功能。
 
-下面列出目前支持的事件节点：
+```go
+package main
 
-```golang
-type Addon interface {
-	// 一个客户端已经连接到了mitmproxy。请注意，一个连接可能对应多个HTTP请求。
-	ClientConnected(*ClientConn)
+import (
+    "log"
+    "github.com/retutils/gomitmproxy/proxy"
+)
 
-	// 一个客户端连接已关闭（由我们或客户端关闭）。
-	ClientDisconnected(*ClientConn)
+// 定义您的 addon
+type MyAddon struct {
+    proxy.BaseAddon // 可选: 嵌入 BaseAddon 以避免实现所有方法
+}
 
-	// mitmproxy 已连接到服务器。
-	ServerConnected(*ConnContext)
+// 实现您需要的方法
+func (a *MyAddon) Request(f *proxy.Flow) {
+    if f.Request.URL.Host == "example.com" {
+        f.Request.Header.Add("X-Intercepted-By", "Go-Mitmproxy")
+    }
+}
 
-	// 服务器连接已关闭（由我们或服务器关闭）。
-	ServerDisconnected(*ConnContext)
+func main() {
+    opts := &proxy.Options{Addr: ":9080"}
+    p, _ := proxy.NewProxy(opts)
 
-	// 与服务器的TLS握手已成功完成。
-	TlsEstablishedServer(*ConnContext)
+    // 注册您的 addon
+    p.AddAddon(&MyAddon{})
 
-	// HTTP请求头已成功读取。此时，请求体为空。
-	Requestheaders(*Flow)
-
-	// 完整的HTTP请求已被读取。
-	Request(*Flow)
-
-	// HTTP响应头已成功读取。此时，响应体为空。
-	Responseheaders(*Flow)
-
-	// 完整的HTTP响应已被读取。
-	Response(*Flow)
-
-	// 流式请求体修改器
-	StreamRequestModifier(*Flow, io.Reader) io.Reader
-
-	// 流式响应体修改器
-	StreamResponseModifier(*Flow, io.Reader) io.Reader
-
-	// WebSocket 连接建立（握手完成）
-	WebsocketHandshake(*Flow)
-
-	// WebSocket 收到消息
-	WebsocketMessage(*Flow, *WebSocketMessage)
+    p.Start()
 }
 ```
 
-## WEB 界面
+更多详细用例请参阅 [examples](./examples)。
 
-你可以通过浏览器访问 http://localhost:9081/ 来使用 WEB 界面。
-
-### 功能点
-
-- 查看 HTTP/HTTPS 请求的详细信息
-- 支持对 JSON 请求/响应进行格式化预览
-- 支持二进制模式查看响应体
-- 支持高级的筛选过滤规则
-- 支持请求断点功能
-
-### 截图示例
-
-![](./assets/web-1.png)
-
-![](./assets/web-2.png)
-
-![](./assets/web-3.png)
-
-### 赞助我
-
-如果你觉得这个项目对你有帮助，不妨考虑给我买杯咖啡。如有技术问题，欢迎沟通。
-
-作者目前离职，如果你有全职或兼职工作介绍，欢迎扫码添加微信好友交流。
-
-<table>
-  <thead>
-    <tr>
-      <th align="center" style="width: 240px;">
-        <div>
-          <img src="./assets/sponsor-me.jpeg" height="200px" alt="微信赞赏码"><br>
-          <sub>微信赞赏码</sub>
-        </div>
-      </th>
-      <th align="center" style="width: 240px;">
-        <div>
-          <img src="./assets/wx.jpg" height="200px" alt="联系我"><br>
-          <sub>联系我</sub>
-        </div>
-      </th>
-    </tr>
-  </thead>
-</table>
-
-## License
+## 📄 License
 
 [MIT License](./LICENSE)
