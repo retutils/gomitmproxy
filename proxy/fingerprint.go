@@ -179,10 +179,17 @@ func ListFingerprints() ([]string, error) {
 	return names, nil
 }
 
-func GetFingerprintDir() string {
+var FingerprintDir string
+
+func init() {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "fingerprints"
+		FingerprintDir = "fingerprints"
+	} else {
+		FingerprintDir = filepath.Join(home, ".mitmproxy", "fingerprints")
 	}
-	return filepath.Join(home, ".mitmproxy", "fingerprints")
+}
+
+func GetFingerprintDir() string {
+	return FingerprintDir
 }

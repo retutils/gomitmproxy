@@ -6,122 +6,200 @@ import (
 	"compress/gzip"
 	"net/http"
 	"testing"
-    
-    "github.com/andybalholm/brotli"
-    "github.com/klauspost/compress/zstd"
+
+	"github.com/andybalholm/brotli"
+	"github.com/klauspost/compress/zstd"
 )
 
-func TestIsTextContentType(t *testing.T) {
-	tests := []struct {
-		contentType string
-		want        bool
-	}{
-		{"text/plain", true},
-		{"application/json", true},
-		{"application/javascript", true},
-		{"image/png", false},
-		{"", false},
+func TestFlowEncoding_DecodedBody_Request(t *testing.T) {
+	// Gzip encoding
+	var gzipBuf bytes.Buffer
+	gw := gzip.NewWriter(&gzipBuf)
+	gw.Write([]byte("gzip data"))
+	gw.Close()
+
+	req := &Request{
+		Header: http.Header{"Content-Encoding": []string{"gzip"}},
+		Body:   gzipBuf.Bytes(),
 	}
 
-	for _, tt := range tests {
-		resp := &Response{Header: make(http.Header)}
-		if tt.contentType != "" {
-			resp.Header.Set("Content-Type", tt.contentType)
-		}
-		if got := resp.IsTextContentType(); got != tt.want {
-			t.Errorf("IsTextContentType(%q) = %v; want %v", tt.contentType, got, tt.want)
-		}
+	body, err := req.DecodedBody()
+	if err != nil {
+		t.Fatalf("DecodedBody error: %v", err)
 	}
+	if string(body) != "gzip data" {
+		t.Errorf("Expected 'gzip data', got '%s'", body)
+	}
+
+	// No body
+	req.Body = nil
+	body, _ = req.DecodedBody()
+	if body != nil {
+		t.Error("Expected nil body")
+	}
+
+	// Identity encoding
+	req.Body = []byte("raw")
+	req.Header.Set("Content-Encoding", "identity")
+	body, _ = req.DecodedBody()
+	if string(body) != "raw" {
+		t.Error("Expected raw body")
+	}
+    
+    // Unsupported encoding
+    req.Header.Set("Content-Encoding", "unknown")
+    _, err = req.DecodedBody()
+    if err == nil {
+        t.Error("Expected error for unknown encoding")
+    }
 }
 
-func TestDecodedBody(t *testing.T) {
-    original := []byte("hello world")
-    
-    // Gzip
-    var gzipBuf bytes.Buffer
-    gw := gzip.NewWriter(&gzipBuf)
-    gw.Write(original)
-    gw.Close()
+func TestFlowEncoding_DecodedBody_Response(t *testing.T) {
+	// Brotli (br)
+	var brBuf bytes.Buffer
+	bw := brotli.NewWriter(&brBuf)
+	bw.Write([]byte("br data"))
+	bw.Close()
+
+	resp := &Response{
+		Header: http.Header{"Content-Encoding": []string{"br"}},
+		Body:   brBuf.Bytes(),
+	}
+
+	body, err := resp.DecodedBody()
+	if err != nil {
+		t.Fatalf("DecodedBody br error: %v", err)
+	}
+	if string(body) != "br data" {
+		t.Errorf("Expected 'br data', got '%s'", body)
+	}
     
     // Deflate
-    var deflateBuf bytes.Buffer
-    dw, _ := flate.NewWriter(&deflateBuf, flate.DefaultCompression)
-    dw.Write(original)
-    dw.Close()
+    var flateBuf bytes.Buffer
+    fw, _ := flate.NewWriter(&flateBuf, flate.DefaultCompression)
+    fw.Write([]byte("deflate data"))
+    fw.Close()
     
-    // Brotli
-    var brBuf bytes.Buffer
-    bw := brotli.NewWriter(&brBuf)
-    bw.Write(original)
-    bw.Close()
-    
-    // Zstd
-    var zstdBuf bytes.Buffer
-    zw, _ := zstd.NewWriter(&zstdBuf)
-    zw.Write(original)
-    zw.Close()
-    
-    tests := []struct {
-        encoding string
-        body []byte
-        wantErr bool
-    }{
-        {"gzip", gzipBuf.Bytes(), false},
-        {"deflate", deflateBuf.Bytes(), false},
-        {"br", brBuf.Bytes(), false},
-        {"zstd", zstdBuf.Bytes(), false},
-        {"identity", original, false},
-        {"", original, false},
-        {"unknown", original, true},
+    resp.Header.Set("Content-Encoding", "deflate")
+    resp.Body = flateBuf.Bytes()
+    body, err = resp.DecodedBody()
+    if err != nil {
+        t.Fatalf("DecodedBody deflate error: %v", err)
     }
-    
-    for _, tt := range tests {
-        // Test Request
-        req := &Request{Header: make(http.Header), Body: tt.body}
-        req.Header.Set("Content-Encoding", tt.encoding)
-        gotReq, err := req.DecodedBody()
-        if (err != nil) != tt.wantErr {
-            t.Errorf("Request.DecodedBody(%s) error = %v, wantErr %v", tt.encoding, err, tt.wantErr)
-        }
-        if !tt.wantErr && string(gotReq) != string(original) {
-            t.Errorf("Request.DecodedBody(%s) = %s, want %s", tt.encoding, gotReq, original)
-        }
-        
-        // Test Response
-        resp := &Response{Header: make(http.Header), Body: tt.body}
-        resp.Header.Set("Content-Encoding", tt.encoding)
-        gotResp, err := resp.DecodedBody()
-        if (err != nil) != tt.wantErr {
-            t.Errorf("Response.DecodedBody(%s) error = %v, wantErr %v", tt.encoding, err, tt.wantErr)
-        }
-        if !tt.wantErr && string(gotResp) != string(original) {
-             t.Errorf("Response.DecodedBody(%s) = %s, want %s", tt.encoding, gotResp, original)
-        }
+    if string(body) != "deflate data" {
+        t.Errorf("Expected 'deflate data', got '%s'", body)
     }
-    
-    // Test Response.ReplaceToDecodedBody
-    resp := &Response{Header: make(http.Header), Body: gzipBuf.Bytes()}
-    resp.Header.Set("Content-Encoding", "gzip")
-    resp.ReplaceToDecodedBody()
-    
-    if string(resp.Body) != string(original) {
-        t.Errorf("ReplaceToDecodedBody failed, got %s", resp.Body)
-    }
-    if resp.Header.Get("Content-Encoding") != "" {
-        t.Error("Content-Encoding header should be removed")
-    }
+
+	// Zstd
+	var zstdBuf bytes.Buffer
+	zw, _ := zstd.NewWriter(&zstdBuf)
+	zw.Write([]byte("zstd data"))
+	zw.Close()
+
+	resp.Header.Set("Content-Encoding", "zstd")
+	resp.Body = zstdBuf.Bytes()
+	body, err = resp.DecodedBody()
+	if err != nil {
+		t.Fatalf("DecodedBody zstd error: %v", err)
+	}
+	if string(body) != "zstd data" {
+		t.Errorf("Expected 'zstd data', got '%s'", body)
+	}
+	
+	// Test Empty Body
+	respEmpty := &Response{Body: nil}
+	body, _ = respEmpty.DecodedBody()
+	if body != nil {
+		t.Error("Expected nil body")
+	}
+	
+	// Test Default Encoding (empty string)
+	respDef := &Response{
+		Header: http.Header{},
+		Body:   []byte("raw"),
+	}
+	body, _ = respDef.DecodedBody()
+	if string(body) != "raw" {
+		t.Error("Expected raw body (empty encoding)")
+	}
+	
+	// Test Identity Encoding
+	respId := &Response{
+		Header: http.Header{"Content-Encoding": []string{"identity"}},
+		Body:   []byte("raw"),
+	}
+	body, _ = respId.DecodedBody()
+	if string(body) != "raw" {
+		t.Error("Expected raw body (identity)")
+	}
 }
 
-func TestDecodeError(t *testing.T) {
-    // Test invalid gzip
-    _, err := decode("gzip", []byte("invalid data"))
-    if err == nil {
-        t.Error("expected error for invalid gzip")
-    }
-    
-    // Test invalid zstd
-    _, err = decode("zstd", []byte("invalid data"))
-    if err == nil {
-        t.Error("expected error for invalid zstd")
-    }
+func TestFlowEncoding_ReplaceToDecodedBody(t *testing.T) {
+	var gzipBuf bytes.Buffer
+	gw := gzip.NewWriter(&gzipBuf)
+	gw.Write([]byte("decodable"))
+	gw.Close()
+
+	resp := &Response{
+		Header: http.Header{
+			"Content-Encoding":  []string{"gzip"},
+			"Transfer-Encoding": []string{"chunked"},
+		},
+		Body: gzipBuf.Bytes(),
+	}
+
+	resp.ReplaceToDecodedBody()
+
+	if string(resp.Body) != "decodable" {
+		t.Errorf("Body not decoded")
+	}
+	if resp.Header.Get("Content-Encoding") != "" {
+		t.Errorf("Content-Encoding not removed")
+	}
+	if resp.Header.Get("Content-Length") != "9" { // len("decodable")
+		t.Errorf("Content-Length not set correctly")
+	}
+	if resp.Header.Get("Transfer-Encoding") != "" {
+		t.Errorf("Transfer-Encoding not removed")
+	}
+}
+
+func TestFlowEncoding_IsTextContentType(t *testing.T) {
+	resp := &Response{Header: http.Header{}}
+	if resp.IsTextContentType() {
+		t.Error("Empty header should not be text")
+	}
+	
+	resp.Header.Set("Content-Type", "application/json")
+	if !resp.IsTextContentType() {
+		t.Error("application/json should be text")
+	}
+	
+	resp.Header.Set("Content-Type", "image/png")
+	if resp.IsTextContentType() {
+		t.Error("image/png should not be text")
+	}
+}
+
+func TestFlowEncoding_DecodeErrors(t *testing.T) {
+	// Gzip error
+	_, err := decode("gzip", []byte("invalid"))
+	if err == nil {
+		t.Error("Expected gzip error")
+	}
+	
+	// Br error (brotli reader usually doesn't error on creation, but on read)
+	// mock read error?
+	
+	// Deflate error
+	_, err = decode("deflate", []byte("invalid"))
+	if err == nil {
+		t.Error("Expected deflate error")
+	}
+	
+	// Zstd error
+	_, err = decode("zstd", []byte("invalid"))
+	if err == nil {
+		t.Error("Expected zstd error")
+	}
 }

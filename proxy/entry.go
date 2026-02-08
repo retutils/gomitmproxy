@@ -3,6 +3,7 @@ package proxy
 import (
 	"bufio"
 	"context"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -155,6 +156,7 @@ func (e *entry) start() error {
 	if err != nil {
 		return err
 	}
+	e.server.Addr = ln.Addr().String()
 
 	log.Infof("Proxy start listen at %v\n", e.server.Addr)
 	pln := &wrapListener{
@@ -253,7 +255,12 @@ func (e *entry) handleConnect(res http.ResponseWriter, req *http.Request) {
 }
 
 func (e *entry) establishConnection(res http.ResponseWriter, f *Flow) (net.Conn, error) {
-	cconn, _, err := res.(http.Hijacker).Hijack()
+	hijacker, ok := res.(http.Hijacker)
+	if !ok {
+		res.WriteHeader(502)
+		return nil, fmt.Errorf("response writer does not support hijacking")
+	}
+	cconn, _, err := hijacker.Hijack()
 	if err != nil {
 		res.WriteHeader(502)
 		return nil, err
@@ -323,7 +330,16 @@ func (e *entry) httpsDialFirstAttack(res http.ResponseWriter, req *http.Request,
 		return
 	}
 
-	peek, err := cconn.(*wrapClientConn).Peek(3)
+	// cconn is net.Conn, usually *wrapClientConn but might not be in tests or if hijacked differently
+	wc, ok := cconn.(*wrapClientConn)
+	if !ok {
+		log.Error("cconn is not *wrapClientConn")
+		cconn.Close()
+		conn.Close()
+		return
+	}
+
+	peek, err := wc.Peek(3)
 	if err != nil {
 		cconn.Close()
 		conn.Close()
@@ -356,7 +372,21 @@ func (e *entry) httpsDialLazyAttack(res http.ResponseWriter, req *http.Request, 
 		return
 	}
 
-	peek, err := cconn.(*wrapClientConn).Peek(3)
+	// cconn is net.Conn, usually *wrapClientConn but might not be in tests or if hijacked differently
+	wc, ok := cconn.(*wrapClientConn)
+	if !ok {
+		// Try to see if it's wrapped differently or just fail?
+		// In tests we passed mockHijackRecorder.Conn which is mockConn.
+		// Real implementation wraps it in newWrapClientConn in Accept().
+		// And establishConnection returns what Hijack returns.
+		// If entry was created correctly, Listener.Accept wraps it.
+		// But in unit test we manually use establishConnection which gets conn from Hijack.
+		log.Error("cconn is not *wrapClientConn")
+		cconn.Close()
+		return
+	}
+
+	peek, err := wc.Peek(3)
 	if err != nil {
 		cconn.Close()
 		log.Error(err)

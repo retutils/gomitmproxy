@@ -80,6 +80,13 @@ func (proxy *Proxy) Close() error {
 	return proxy.entry.close()
 }
 
+func (proxy *Proxy) Addr() string {
+	if proxy.entry != nil && proxy.entry.server != nil {
+		return proxy.entry.server.Addr
+	}
+	return ""
+}
+
 func (proxy *Proxy) Shutdown(ctx context.Context) error {
 	return proxy.entry.shutdown(ctx)
 }

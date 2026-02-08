@@ -12,156 +12,161 @@
 
 [简体中文](./README_CN.md)
 
-`go-mitmproxy` is a Golang implementation of [mitmproxy](https://mitmproxy.org/) that supports man-in-the-middle attacks and parsing, monitoring, and tampering with HTTP/HTTPS traffic.
+`go-mitmproxy` is a robust Golang implementation of [mitmproxy](https://mitmproxy.org/). It serves as a versatile tool for intercepting, inspecting, modifying, and replaying HTTP/HTTPS traffic. It supports a powerful plugin system, making it easy to extend functionality using Go.
 
-## Key features
+## ✨ Key Features
 
-- Parses HTTP/HTTPS traffic and displays traffic details via a [web interface](#web-interface).
-- Supports a [plugin mechanism](#adding-functionality-by-developing-plugins) for easily extending functionality. Various event hooks can be found in the [examples](./examples) directory.
-- HTTPS certificate handling is compatible with [mitmproxy](https://mitmproxy.org/) and stored in the `~/.mitmproxy` folder. If the root certificate is already trusted from a previous use of `mitmproxy`, `go-mitmproxy` can use it directly.
-- Map Remote and Map Local support.
-- HTTP/2 support.
-- Refer to the [configuration documentation](#additional-parameters) for more features.
+- **Traffic Interception**: Intercepts HTTP & HTTPS traffic with full man-in-the-middle (MITM) capabilities.
+- **Web Interface**: A built-in web UI (default port 9081) for real-time traffic monitoring and inspection.
+- **Addon System**: Highly extensible architecture allowing you to write Go plugins to modify requests/responses on the fly.
+- **TLS Fingerprinting**: Emulate different browser fingerprints (JA3/JA4) to evade bot detection.
+- **Flow Storage & Search**: Save intercepted traffic to disk (DuckDB) and perform full-text search (Bleve) locally.
+- **Map Remote**: Rewrite request URLs to redirect traffic to different destinations.
+- **Map Local**: Serve local files instead of fetching from the remote server.
+- **HTTP/2 Support**: Fully compatible with HTTP/2 protocol.
+- **Certificate Management**: Automatic generation and management of CA certificates, compatible with mitmproxy.
 
-## Unsupported features
+## 📦 Installation
 
-- Only supports setting the proxy manually in the client, not transparent proxy mode.
-
-
-> For more information on the difference between manually setting a proxy and transparent proxy mode, please refer to the mitmproxy documentation for the Python version: [How mitmproxy works](https://docs.mitmproxy.org/stable/concepts-howmitmproxyworks/). go-mitmproxy currently supports "Explicit HTTP" and "Explicit HTTPS" as mentioned in the article.
-
-## Command Line Tool
-
-### Installation
+### Using `go install` (Recommended)
 
 ```bash
 go install github.com/retutils/gomitmproxy/cmd/go-mitmproxy@latest
 ```
 
-### Usage
+### From Source
 
-Use the following command to start the go-mitmproxy proxy server:
+```bash
+git clone https://github.com/retutils/gomitmproxy.git
+cd gomitmproxy
+go mod tidy
+go build -o go-mitmproxy ./cmd/go-mitmproxy
+```
+
+## 🚀 Command Line Usage
+
+Start the proxy server with default settings (Proxy: :9080, Web UI: :9081):
 
 ```bash
 go-mitmproxy
 ```
 
-After starting, the HTTP proxy address is set to port 9080 by default, and the web interface is set to port 9081 by default.
+### Common Flags
 
-The certificate needs to be installed after the first startup to parse HTTPS traffic. The certificate will be automatically generated after the first startup command and stored in `~/.mitmproxy/mitmproxy-ca-cert.pem`. Installation steps can be found in the Python mitmproxy documentation: [About Certificates](https://docs.mitmproxy.org/stable/concepts-certificates/).
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-addr` | Proxy listen address | `:9080` |
+| `-web_addr` | Web interface listen address | `:9081` |
+| `-ssl_insecure` | Skip upstream certificate verification | `false` |
+| `-storage_dir` | Directory to save captured flows | `""` |
+| `-tls_fingerprint` | TLS fingerprint to emulate (chrome, firefox, ios, random) | `""` |
+| `-map_local` | Path to Map Local config file (JSON) | `""` |
+| `-map_remote` | Path to Map Remote config file (JSON) | `""` |
+| `-dump` | Dump flows to file | `""` |
+| `-proxyauth` | Basic auth for proxy (user:pass) | `""` |
 
-### Additional Parameters
-
-ou can use the following command to view more parameters of go-mitmproxy:
+View all available options:
 
 ```bash
 go-mitmproxy -h
 ```
 
-```txt
-Usage of go-mitmproxy:
-  -addr string
-    	proxy listen addr (default ":9080")
-  -allow_hosts value
-    	a list of allow hosts
-  -cert_path string
-    	path of generate cert files
-  -debug int
-    	debug mode: 1 - print debug log, 2 - show debug from
-  -f string
-    	Read configuration from file by passing in the file path of a JSON configuration file.
-  -ignore_hosts value
-    	a list of ignore hosts
-  -map_local string
-    	map local config filename
-  -map_remote string
-    	map remote config filename
-  -proxyauth string
-        enable proxy authentication. Format: "username:pass", "user1:pass1|user2:pass2","any" to accept any user/pass combination
-  -fingerprint_list
-    	List saved client fingerprints
-  -fingerprint_save string
-    	Save client fingerprint to file with specified name
-  -ssl_insecure
-    	not verify upstream server SSL/TLS certificates.
-  -storage_dir string
-    	Directory to store captured flows (DuckDB + Bleve)
-  -search string
-        Search query for stored flows (requires -storage_dir)
-  -tls_fingerprint string
-        TLS fingerprint to emulate (chrome, firefox, ios, android, edge, 360, qq, random, client)
-  -upstream string
-    	upstream proxy
-  -upstream_cert
-    	connect to upstream server to look up certificate details (default true)
-  -version
-    	show go-mitmproxy version
-  -web_addr string
-    	web interface listen addr (default ":9081")
-```
+### Certificate Setup
+After the first run, the CA certificate is generated at `~/.mitmproxy/mitmproxy-ca-cert.pem`. You must install and trust this certificate on your client device to intercept HTTPS traffic. See [mitmproxy docs](https://docs.mitmproxy.org/stable/concepts-certificates/) for installation instructions.
 
-## TLS Fingerprinting
+## 🛠 Feature Details
 
-`go-mitmproxy` supports TLS fingerprint spoofing to mimic specific browsers or clients when connecting to upstream servers. This is useful for avoiding detection by fingerprint-based blocking systems.
+### 1. TLS Fingerprinting
+Evade fingerprint-based blocking by mimicking real browsers.
 
-### Supported Presets
-- chrome, firefox, edge, safari, 360, qq
-- ios, android
-- random
-- client (mirrors the connected client's fingerprint)
-
-### Custom Fingerprints
-
-You can capture and save a real client's fingerprint to use later.
-
-1. **Capture**: Start the proxy in capture mode and make a request through it with your desired client:
-   ```bash
-   go-mitmproxy -fingerprint_save my_chrome_profile
-   ```
-   *(This saves the fingerprint to `~/.mitmproxy/fingerprints/my_chrome_profile.json`)*
-
-2. **List**: View saved fingerprints:
-   ```bash
-   go-mitmproxy -fingerprint_list
-   ```
-
-3. **Use**: Start the proxy using the saved fingerprint:
-   ```bash
-   go-mitmproxy -tls_fingerprint my_chrome_profile
-   ```
-
-## Flow Storage & Search
-
-`go-mitmproxy` supports persistent storage of intercepted flows using **DuckDB** and **Bleve**. This allows for saving traffic history and performing full-text search on requests and responses, which is useful for security analysis.
-
-### Enable Storage
-Start the proxy with a storage directory:
+**Usage:**
 ```bash
-go-mitmproxy -storage_dir ./mitm-data
+go-mitmproxy -tls_fingerprint chrome
+```
+Supported presets: `chrome`, `firefox`, `edge`, `safari`, `360`, `qq`, `ios`, `android`, `random`, `client`.
+
+**Custom Fingerprints:**
+You can capture a real fingerprint and use it later.
+1. **Capture**: `go-mitmproxy -fingerprint_save my_fingerprint`
+2. **List**: `go-mitmproxy -fingerprint_list`
+3. **Use**: `go-mitmproxy -tls_fingerprint my_fingerprint`
+
+### 2. Flow Storage & Search
+Persist traffic history and search through it using a local database usage DuckDB and Bleve.
+
+**Enable Storage:**
+```bash
+go-mitmproxy -storage_dir ./data
 ```
 
-### Search Flows
-Index query syntax supports field-specific searches. 
+**Search:**
+You can search the stored flows using valid Bleve query syntax.
 Available fields: `Method`, `URL`, `Status`, `ReqBody`, `ResBody`, `ReqHeader`, `ResHeader`.
 
-**Examples**:
-- Find all POST requests:
-  `go-mitmproxy -storage_dir ./mitm-data -search "Method:POST"`
-- Find requests with specific header value:
-  `go-mitmproxy -storage_dir ./mitm-data -search "ReqHeader.Content-Type:json"`
-- Find "password" in request body:
-  `go-mitmproxy -storage_dir ./mitm-data -search "ReqBody:password"`
+```bash
+# Search for POST requests to specific endpoint
+go-mitmproxy -storage_dir ./data -search "Method:POST +URL:api"
 
-## Importing as a package for developing functionalities
+# Search for specific header value
+go-mitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
+```
 
-### Simple Example
+### 3. Map Remote
+Rewrite request locations to different destinations based on rules.
 
-```golang
+**Config File (`map_remote.json`):**
+```json
+{
+  "enable": true,
+  "items": [
+    {
+      "from": { "path": "/old-api/*" },
+      "to": {
+        "protocol": "https",
+        "host": "new-api.example.com",
+        "path": "/v2/"
+      },
+      "enable": true
+    }
+  ]
+}
+```
+**Run:** `go-mitmproxy -map_remote map_remote.json`
+
+### 4. Map Local
+Serve local files for specific requests.
+
+**Config File (`map_local.json`):**
+```json
+{
+  "enable": true,
+  "items": [
+    {
+      "from": { "url": "https://example.com/style.css" },
+      "to": { "path": "./local_style.css" },
+      "enable": true
+    },
+    {
+      "from": { "path": "/static/*" },
+      "to": { "path": "./local_static_dir" },
+      "enable": true
+    }
+  ]
+}
+```
+**Run:** `go-mitmproxy -map_local map_local.json`
+
+## 📚 Library Usage
+
+You can use `go-mitmproxy` as a library to build custom proxy tools.
+
+### Basic Example
+
+```go
 package main
 
 import (
 	"log"
-
 	"github.com/retutils/gomitmproxy/proxy"
 )
 
@@ -169,6 +174,7 @@ func main() {
 	opts := &proxy.Options{
 		Addr:              ":9080",
 		StreamLargeBodies: 1024 * 1024 * 5,
+        SslInsecure:       true,
 	}
 
 	p, err := proxy.NewProxy(opts)
@@ -180,100 +186,43 @@ func main() {
 }
 ```
 
-### Adding Functionality by Developing Plugins
+### Developing Custom Addons (Plugins)
 
-Refer to the [examples](./examples) for adding your own plugins by implementing the `AddAddon` method.
+Extend functionality by implementing the `Addon` interface.
 
-The following are the currently supported event nodes:
+```go
+package main
 
-```golang
-type Addon interface {
-	// A client has connected to mitmproxy. Note that a connection can correspond to multiple HTTP requests.
-	ClientConnected(*ClientConn)
+import (
+    "log"
+    "github.com/retutils/gomitmproxy/proxy"
+)
 
-	// A client connection has been closed (either by us or the client).
-	ClientDisconnected(*ClientConn)
+// Define your addon
+type MyAddon struct {
+    proxy.BaseAddon // optional: embed BaseAddon to avoid implementing all methods
+}
 
-	// Mitmproxy has connected to a server.
-	ServerConnected(*ConnContext)
+// Implement methods you need
+func (a *MyAddon) Request(f *proxy.Flow) {
+    if f.Request.URL.Host == "example.com" {
+        f.Request.Header.Add("X-Intercepted-By", "Go-Mitmproxy")
+    }
+}
 
-	// A server connection has been closed (either by us or the server).
-	ServerDisconnected(*ConnContext)
+func main() {
+    opts := &proxy.Options{Addr: ":9080"}
+    p, _ := proxy.NewProxy(opts)
 
-	// The TLS handshake with the server has been completed successfully.
-	TlsEstablishedServer(*ConnContext)
+    // Register your addon
+    p.AddAddon(&MyAddon{})
 
-	// HTTP request headers were successfully read. At this point, the body is empty.
-	Requestheaders(*Flow)
-
-	// The full HTTP request has been read.
-	Request(*Flow)
-
-	// HTTP response headers were successfully read. At this point, the body is empty.
-	Responseheaders(*Flow)
-
-	// The full HTTP response has been read.
-	Response(*Flow)
-
-	// Stream request body modifier
-	StreamRequestModifier(*Flow, io.Reader) io.Reader
-
-	// Stream response body modifier
-	StreamResponseModifier(*Flow, io.Reader) io.Reader
-
-	// WebSocket connection established (handshake complete)
-	WebsocketHandshake(*Flow)
-
-	// WebSocket message received from client
-	WebsocketMessage(*Flow, *WebSocketMessage)
+    p.Start()
 }
 ```
 
-## WEB Interface
+See [examples](./examples) for more detailed use cases.
 
-You can access the web interface at http://localhost:9081/ using a web browser.
-
-### Features
-
-- View detailed information of HTTP/HTTPS requests
-- Supports formatted preview of JSON requests/responses
-- Supports binary mode to view response body
-- Supports advanced filtering rules
-- Supports request breakpoint function
-
-### Screenshot Examples
-
-![](./assets/web-1.png)
-
-![](./assets/web-2.png)
-
-![](./assets/web-3.png)
-
-### Sponsor Me
-
-If you find this project helpful, consider buying me a cup of coffee. Feel free to reach out for any technical inquiries.
-
-The author is currently unemployed. If you have any full-time or part-time job opportunities, feel free to scan the QR code to add me on WeChat for further discussion.
-
-<table>
-  <thead>
-    <tr>
-      <th align="center" style="width: 240px;">
-        <div>
-          <img src="./assets/sponsor-me.jpeg" height="200px" alt="WeChat QR Code for Sponsorship"><br>
-          <sub>WeChat QR Code for Sponsorship</sub>
-        </div>
-      </th>
-      <th align="center" style="width: 240px;">
-        <div>
-          <img src="./assets/wx.jpg" height="200px" alt="Contact Me"><br>
-          <sub>Contact Me</sub>
-        </div>
-      </th>
-    </tr>
-  </thead>
-</table>
-
-## License
+## 📄 License
 
 [MIT License](./LICENSE)

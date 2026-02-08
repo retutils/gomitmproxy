@@ -5,3 +5,8 @@
 /.idea
 dist/
 .vscode
+*.out
+*.html
+*.test
+*.log
+cmd/go-mitmproxy/go-mitmproxy

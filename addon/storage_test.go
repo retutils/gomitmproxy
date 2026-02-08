@@ -5,6 +5,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"testing"
+	"time"
 	
 	"github.com/retutils/gomitmproxy/proxy"
 	uuid "github.com/satori/go.uuid"
@@ -43,11 +44,18 @@ func TestStorageAddon_SaveAndSearch(t *testing.T) {
 	}
 	// Mock URL string wrapper if needed, but gomitmproxy URL is *url.URL
 	
-	// Save flow
+	// Trigger Response method
+	addon.Response(flow)
+
+	// wait for async save
+	time.Sleep(500 * time.Millisecond)
+
+	/*
 	err = addon.Service.Save(flow)
 	if err != nil {
 		t.Fatalf("Failed to save flow: %v", err)
 	}
+	*/
 
 	// Allow some time for indexing (Bleve is usually fast but async in some configs, here it's sync in Save?)
 	// Our Save implementation calls index.Index which is synchronous for the index writer but might have slight delay for visibility? 

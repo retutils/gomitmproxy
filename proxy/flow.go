@@ -42,7 +42,11 @@ func (r *Request) Raw() *http.Request {
 func (req *Request) MarshalJSON() ([]byte, error) {
 	r := make(map[string]interface{})
 	r["method"] = req.Method
-	r["url"] = req.URL.String()
+	if req.URL != nil {
+		r["url"] = req.URL.String()
+	} else {
+		r["url"] = ""
+	}
 	r["proto"] = req.Proto
 	r["header"] = req.Header
 	return json.Marshal(r)

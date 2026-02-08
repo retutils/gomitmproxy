@@ -171,4 +171,47 @@ func TestConnectionOffUpstreamCert(t *testing.T) {
 			}
 		})
 	})
+
+}
+
+func TestConnection_JSON(t *testing.T) {
+	c := newClientConn(&mockConn{})
+	b, err := c.MarshalJSON()
+	if err != nil {
+		t.Errorf("ClientConn MarshalJSON failed: %v", err)
+	}
+	if len(b) == 0 {
+		t.Error("ClientConn JSON empty")
+	}
+
+	s := newServerConn()
+	s.Conn = &mockConn{}
+	b, err = s.MarshalJSON()
+	if err != nil {
+		t.Errorf("ServerConn MarshalJSON failed: %v", err)
+	}
+	if len(b) == 0 {
+		t.Error("ServerConn JSON empty")
+	}
+	
+	s.Conn = nil
+	b, _ = s.MarshalJSON()
+	if len(b) == 0 {
+		t.Error("ServerConn JSON empty")
+	}
+}
+
+func TestConnection_Misc(t *testing.T) {
+	c := newClientConn(nil)
+	ctx := &ConnContext{ClientConn: c}
+	if ctx.Id() != c.Id {
+		t.Error("ID mismatch")
+	}
+	
+	s := newServerConn()
+	state := &tls.ConnectionState{}
+	s.tlsState = state
+	if s.TlsState() != state {
+		t.Error("TlsState mismatch")
+	}
 }

@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"time"
 
 	log "github.com/sirupsen/logrus"
 )
@@ -44,9 +45,19 @@ func transfer(log *log.Entry, server, client io.ReadWriteCloser) {
 
 	errChan := make(chan error)
 	go func() {
+		// client -> server
 		_, err := io.Copy(server, client)
 		log.Debugln("client copy end", err)
-		client.Close()
+		// Close server write side? net.Conn usually fully closes.
+		// If server is *net.TCPConn we could CloseWrite.
+		// But here it's io.ReadWriteCloser.
+		// server.Close() closes both ways usually.
+		
+		// If we close server here, the other goroutine reading from server might get error or EOF.
+		// But other goroutine copies server -> client.
+		
+		server.Close() 
+		
 		select {
 		case <-done:
 			return
@@ -55,15 +66,23 @@ func transfer(log *log.Entry, server, client io.ReadWriteCloser) {
 		}
 	}()
 	go func() {
+		// server -> client
 		_, err := io.Copy(client, server)
 		log.Debugln("server copy end", err)
-		server.Close()
+		
+		// If we close client, the other goroutine reading from client (if not finished) gets EOF/error.
+		client.Close()
 
 		if clientConn, ok := client.(*wrapClientConn); ok {
-			err := clientConn.Conn.(*net.TCPConn).CloseRead()
-			log.Debugln("clientConn.Conn.(*net.TCPConn).CloseRead()", err)
+			if tcpConn, ok := clientConn.Conn.(*net.TCPConn); ok {
+				// CloseRead? client is already Closed above.
+				// CloseRead is for half-close when we want to continue writing?
+				// But we just finished writing to client (Copy(client, server)).
+				// So we are done with client.
+				_ = tcpConn
+			}
 		}
-
+		
 		select {
 		case <-done:
 			return
@@ -72,10 +91,26 @@ func transfer(log *log.Entry, server, client io.ReadWriteCloser) {
 		}
 	}()
 
+	// Wait for 2? No, if one side closes, we should probably stop?
+	// But io.Copy returns when EOF.
+	// If one direction finishes, we might want to wait for other or close other.
+	// Original code waited for 2.
+	// But if one errors, it returns.
+	
+	// Issue in test: using pipes, io.Copy might block if not closed properly.
+	// We ensure pipes are closed in test.
+	
 	for i := 0; i < 2; i++ {
-		if err := <-errChan; err != nil {
-			logErr(log, err)
-			return // 如果有错误，直接返回
+		select {
+		case err := <-errChan:
+			if err != nil {
+				logErr(log, err)
+				return 
+			}
+		case <-done:
+			return
+		case <-time.After(30 * time.Second):
+			return
 		}
 	}
 }

@@ -8,16 +8,17 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 
 	"github.com/retutils/gomitmproxy/cert"
 	"github.com/retutils/gomitmproxy/internal/helper"
-	utls "github.com/refraction-networking/utls"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 )
 
 type attackerListener struct {
 	connChan chan net.Conn
+	once     sync.Once
 }
 
 func (l *attackerListener) accept(conn net.Conn) {
@@ -25,10 +26,18 @@ func (l *attackerListener) accept(conn net.Conn) {
 }
 
 func (l *attackerListener) Accept() (net.Conn, error) {
-	c := <-l.connChan
+	c, ok := <-l.connChan
+	if !ok {
+		return nil, net.ErrClosed
+	}
 	return c, nil
 }
-func (l *attackerListener) Close() error   { return nil }
+func (l *attackerListener) Close() error {
+	l.once.Do(func() {
+		close(l.connChan)
+	})
+	return nil
+}
 func (l *attackerListener) Addr() net.Addr { return nil }
 
 type attackerConn struct {
@@ -207,121 +216,17 @@ func (a *attacker) serverTlsHandshake(ctx context.Context, connCtx *ConnContext)
 
 	// Handle utls fingerprint if configured
 	if proxy.Opts.TlsFingerprint != "" {
-		uConfig := &utls.Config{
-			InsecureSkipVerify: proxy.Opts.SslInsecure,
-			KeyLogWriter:       helper.GetTlsKeyLogWriter(),
-			ServerName:         clientHello.ServerName,
-			NextProtos:         clientHello.SupportedProtos,
-			CipherSuites:       clientHello.CipherSuites,
-		}
-		if len(clientHello.SupportedVersions) > 0 {
-			minVersion := clientHello.SupportedVersions[0]
-			maxVersion := clientHello.SupportedVersions[0]
-			for _, version := range clientHello.SupportedVersions {
-				if version < minVersion {
-					minVersion = version
-				}
-				if version > maxVersion {
-					maxVersion = version
-				}
-			}
-			uConfig.MinVersion = minVersion
-			uConfig.MaxVersion = maxVersion
+		uConn, err := NewUtlsConn(serverConn.Conn, proxy.Opts, clientHello)
+		if err != nil {
+			return err
 		}
 
-		var (
-			helloID utls.ClientHelloID
-			uConn   *utls.UConn
-		)
-
-		switch strings.ToLower(proxy.Opts.TlsFingerprint) {
-		case "chrome":
-			helloID = utls.HelloChrome_Auto
-		case "firefox":
-			helloID = utls.HelloFirefox_Auto
-		case "ios":
-			helloID = utls.HelloIOS_Auto
-		case "android":
-			helloID = utls.HelloAndroid_11_OkHttp
-		case "edge":
-			helloID = utls.HelloEdge_Auto
-		case "safari":
-			helloID = utls.HelloSafari_Auto
-		case "360":
-			helloID = utls.Hello360_Auto
-		case "qq":
-			helloID = utls.HelloQQ_Auto
-		case "client":
-			uConfig.CipherSuites = nil // Clear default cipher suites to use client's
-			uConn = utls.UClient(serverConn.Conn, uConfig, utls.HelloCustom)
-			spec := mirroredClientHelloSpec(clientHello)
-			if err := uConn.ApplyPreset(spec); err != nil {
-				return err
-			}
-			serverConn.tlsConn = uConn
-			if err := uConn.HandshakeContext(ctx); err != nil {
-				return err
-			}
-			goto HandshakeDone
-		case "random":
-			helloID = utls.HelloRandomized
-		default:
-			// Check if it's a saved profile
-			fp, err := LoadFingerprint(proxy.Opts.TlsFingerprint)
-			if err == nil && fp != nil {
-				uConfig.CipherSuites = nil // Clear default cipher suites
-				uConn = utls.UClient(serverConn.Conn, uConfig, utls.HelloCustom)
-				spec := fp.ToSpec()
-				
-				// Ensure SNI is set from current connection context, as fingerprint doesn't carry request-specific SNI
-				hasSNI := false
-				for _, ext := range spec.Extensions {
-					if _, ok := ext.(*utls.SNIExtension); ok {
-						hasSNI = true
-						break
-					}
-				}
-				if !hasSNI {
-					spec.Extensions = append(spec.Extensions, &utls.SNIExtension{ServerName: clientHello.ServerName})
-				}
-
-				if err := uConn.ApplyPreset(spec); err != nil {
-					return err
-				}
-				serverConn.tlsConn = uConn
-				if err := uConn.HandshakeContext(ctx); err != nil {
-					return err
-				}
-				goto HandshakeDone
-			}
-			
-			// Fallback to Chrome
-			helloID = utls.HelloChrome_Auto
-		}
-
-		uConn = utls.UClient(serverConn.Conn, uConfig, helloID)
 		serverConn.tlsConn = uConn
 		if err := uConn.HandshakeContext(ctx); err != nil {
 			return err
 		}
 
-	HandshakeDone:
-		state := uConn.ConnectionState()
-		// Manual conversion from utls.ConnectionState to tls.ConnectionState
-		serverConn.tlsState = &tls.ConnectionState{
-			Version:                     state.Version,
-			HandshakeComplete:           state.HandshakeComplete,
-			DidResume:                   state.DidResume,
-			CipherSuite:                 state.CipherSuite,
-			NegotiatedProtocol:          state.NegotiatedProtocol,
-			NegotiatedProtocolIsMutual:  state.NegotiatedProtocolIsMutual,
-			ServerName:                  state.ServerName,
-			PeerCertificates:            state.PeerCertificates,
-			VerifiedChains:              state.VerifiedChains,
-			SignedCertificateTimestamps: state.SignedCertificateTimestamps,
-			OCSPResponse:                state.OCSPResponse,
-			TLSUnique:                   state.TLSUnique,
-		}
+		serverConn.tlsState = UtlsStateToTlsState(uConn.ConnectionState())
 	} else {
 		// Existing logic for standard tls
 		serverTlsConfig := &tls.Config{
@@ -551,8 +456,6 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 		"method": req.Method,
 	})
 
-
-
 	// when addons panic
 	defer func() {
 		if err := recover(); err != nil {
@@ -666,6 +569,7 @@ func (a *attacker) attack(res http.ResponseWriter, req *http.Request) {
 
 	defer proxyRes.Body.Close()
 
+	// Handle response
 	f.Response = &Response{
 		StatusCode: proxyRes.StatusCode,
 		Header:     proxyRes.Header,
@@ -746,84 +650,5 @@ func (a *attacker) reply(res http.ResponseWriter, log *log.Entry, response *Resp
 	}
 }
 
-func mirroredClientHelloSpec(info *tls.ClientHelloInfo) *utls.ClientHelloSpec {
-	spec := &utls.ClientHelloSpec{}
 
-	// CIPHER SUITES
-	spec.CipherSuites = make([]uint16, len(info.CipherSuites))
-	copy(spec.CipherSuites, info.CipherSuites)
 
-	// COMPRESSION METHODS
-	// Go tls always sends [0] for compression methods
-	spec.CompressionMethods = []uint8{0}
-
-	// EXTENSIONS
-	extensions := []utls.TLSExtension{}
-
-	// SNI
-	if info.ServerName != "" {
-		extensions = append(extensions, &utls.SNIExtension{
-			ServerName: info.ServerName,
-		})
-	}
-
-	// Supported Curves (Groups)
-	if len(info.SupportedCurves) > 0 {
-		curves := make([]utls.CurveID, len(info.SupportedCurves))
-		for i, c := range info.SupportedCurves {
-			curves[i] = utls.CurveID(c)
-		}
-		extensions = append(extensions, &utls.SupportedCurvesExtension{
-			Curves: curves,
-		})
-	}
-
-	// Supported Points (Formats)
-	if len(info.SupportedPoints) > 0 {
-		extensions = append(extensions, &utls.SupportedPointsExtension{
-			SupportedPoints: info.SupportedPoints,
-		})
-	}
-
-	// Signature Schemes (Algorithms)
-	if len(info.SignatureSchemes) > 0 {
-		algos := make([]utls.SignatureScheme, len(info.SignatureSchemes))
-		for i, s := range info.SignatureSchemes {
-			algos[i] = utls.SignatureScheme(s)
-		}
-		extensions = append(extensions, &utls.SignatureAlgorithmsExtension{
-			SupportedSignatureAlgorithms: algos,
-		})
-	}
-
-	// ALPN
-	if len(info.SupportedProtos) > 0 {
-		extensions = append(extensions, &utls.ALPNExtension{
-			AlpnProtocols: info.SupportedProtos,
-		})
-	}
-
-	// Supported Versions
-	if len(info.SupportedVersions) > 0 {
-		versions := make([]uint16, len(info.SupportedVersions))
-		copy(versions, info.SupportedVersions)
-		extensions = append(extensions, &utls.SupportedVersionsExtension{
-			Versions: versions,
-		})
-	}
-	
-	// Key Share
-	if len(info.SupportedCurves) > 0 {
-		keyShares := []utls.KeyShare{}
-		for _, curve := range info.SupportedCurves {
-			keyShares = append(keyShares, utls.KeyShare{Group: utls.CurveID(curve)})
-		}
-		extensions = append(extensions, &utls.KeyShareExtension{
-			KeyShares: keyShares,
-		})
-	}
-
-	spec.Extensions = extensions
-
-	return spec
-}
