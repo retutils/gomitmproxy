@@ -1,18 +1,6 @@
 # gomitmproxy
 
-<div align="center" markdown="1">
-   <a href="https://apps.apple.com/us/app/sqlman-mysql-database-gui/id6498632117?mt=12">
-	 <img src="./assets/sqlman-en.png" alt="sqlman" width="650"/>
-   </a>
-
-[Welcome to my software: Sqlman - MySQL Database GUI](https://apps.apple.com/us/app/sqlman-mysql-database-gui/id6498632117?mt=12)
-<br>
-
-</div>
-
-[简体中文](./README_CN.md)
-
-`gomitmproxy` is a robust Golang implementation of a man-in-the-middle proxy, inspired by [mitmproxy](https://mitmproxy.org/). It serves as a versatile, standalone tool for intercepting, inspecting, modifying, and replaying HTTP/HTTPS traffic. Built with performance and extensibility in mind, it supports a powerful plugin system, making it easy to extend functionality using Go.
+`gomitmproxy` is a robust Golang implementation of a man-in-the-middle proxy, inspired by [go-mitmproxy](https://github.com/lqqyt2423/go-mitmproxy) and [mitmproxy](https://mitmproxy.org/). It serves as a versatile, standalone tool for intercepting, inspecting, modifying, and replaying HTTP/HTTPS traffic. Built with performance and extensibility in mind, it supports a powerful plugin system, making it easy to extend functionality using Go.
 
 ## ✨ Key Features
 
