@@ -144,9 +144,11 @@ func TestEvaluator(t *testing.T) {
 				Path:   "/v1/users",
 			},
 			Proto: "HTTP/1.1",
+			Body:  []byte(`{"user_id": 123, "name": "test"}`),
 		},
 		Response: &proxy.Response{
 			StatusCode: 201,
+			Body:       []byte(`{"status": "created", "id": 123}`),
 		},
 	}
 
@@ -192,6 +194,11 @@ func TestEvaluator(t *testing.T) {
 		// Nested
 		{"Nested True", `req.host.cont:"example" AND (resp.code.eq:200 OR resp.code.eq:201)`, true},
 		{"Nested False", `req.host.cont:"example" AND (resp.code.eq:400 OR resp.code.eq:404)`, false},
+
+		// Body Search
+		{"Req Body Cont", `req.body.cont:"user_id"`, true},
+		{"Req Body Eq False", `req.body.eq:"full_body"`, false},
+		{"Resp Body Like", `resp.body.like:"*created*"`, true},
 	}
 
 	for _, tt := range tests {

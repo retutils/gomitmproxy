@@ -52,6 +52,12 @@ func (r *RequestClause) Eval(f *proxy.Flow) bool {
 	if r.Query != nil && !r.Query.Eval(f.Request.URL.RawQuery) {
 		return false
 	}
+	if r.Body != nil {
+		body, err := f.Request.DecodedBody()
+		if err == nil && !r.Body.Eval(string(body)) {
+			return false
+		}
+	}
 	// TODO: Port, TLS
 	return true
 }
@@ -62,6 +68,12 @@ func (r *ResponseClause) Eval(f *proxy.Flow) bool {
 	}
 	if r.StatusCode != nil && !r.StatusCode.Eval(f.Response.StatusCode) {
 		return false
+	}
+	if r.Body != nil {
+		body, err := f.Response.DecodedBody()
+		if err == nil && !r.Body.Eval(string(body)) {
+			return false
+		}
 	}
 	// TODO: Length
 	return true

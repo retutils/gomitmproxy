@@ -55,6 +55,9 @@ func buildReqQuery(r *httpql.RequestClause) query.Query {
 	if r.Query != nil {
 		bq.AddMust(buildStringQuery("Query", r.Query))
 	}
+	if r.Body != nil {
+		bq.AddMust(buildStringQuery("ReqBody", r.Body))
+	}
 	if r.Port != nil {
 		bq.AddMust(buildIntQuery("Port", r.Port))
 	}
@@ -68,6 +71,9 @@ func buildRespQuery(r *httpql.ResponseClause) query.Query {
 
 	if r.StatusCode != nil {
 		bq.AddMust(buildIntQuery("Status", r.StatusCode))
+	}
+	if r.Body != nil {
+		bq.AddMust(buildStringQuery("ResBody", r.Body))
 	}
 	if r.Length != nil {
 		bq.AddMust(buildIntQuery("RespLen", r.Length))
@@ -100,10 +106,23 @@ func buildStringQuery(field string, s *httpql.StringExpr) query.Query {
 		return bq
 
 	case httpql.OpCont:
-		// Contains -> Wildcard *val*
-		wq := query.NewWildcardQuery("*" + s.Value + "*")
-		wq.SetField(field)
-		return wq
+		// Contains -> Wildcard is bad for analyzed text.
+		// If field is "Method" (keyword), Wildcard is fine.
+		// If field is "ReqBody" or "ResBody" (standard), Wildcard *foo* only matches if 'foo' is a token.
+		// Better approach for standard text: MatchQuery (matches tokens) or specialized logic.
+		// For consistency with "Contains", if it's a phrase, we probably want MatchPhrase.
+		
+		if field == "Method" {
+			wq := query.NewWildcardQuery("*" + s.Value + "*")
+			wq.SetField(field)
+			return wq
+		}
+
+		// For text fields, "contains" usually means the terms are present.
+		// We use MatchPhrase to ensure order if multiple words.
+		mpq := query.NewMatchPhraseQuery(s.Value)
+		mpq.SetField(field)
+		return mpq
 
 	case httpql.OpNCont:
 		q := buildStringQuery(field, &httpql.StringExpr{Value: s.Value, Operator: httpql.OpCont})

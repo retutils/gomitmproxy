@@ -155,4 +155,15 @@ func TestStorageAddon_Integration_FullFlow(t *testing.T) {
 	if len(results) > 0 {
 		t.Errorf("Expected 0 results for HTTPQL '%s', got %d", httpqlQueryNegative, len(results))
 	}
+
+	// 8. Test HTTPQL Body Search
+	// Body was "search-query-123", search for phrase "search-query"
+	httpqlBodyQuery := `req.body.cont:"search-query"`
+	results, err = storageAddon.Service.Search(httpqlBodyQuery)
+	if err != nil {
+		t.Fatalf("HTTPQL Body Search failed: %v", err)
+	}
+	if len(results) == 0 {
+		t.Errorf("Expected to find request by HTTPQL Body '%s', got 0 results", httpqlBodyQuery)
+	}
 }
