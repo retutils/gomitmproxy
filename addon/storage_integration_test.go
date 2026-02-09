@@ -134,4 +134,25 @@ func TestStorageAddon_Integration_FullFlow(t *testing.T) {
 	if len(results) == 0 {
 		t.Errorf("Expected to find request by response header 'Found-It', got 0 results")
 	}
+
+	// 7. Test HTTPQL
+	// req.method.eq:"POST" AND resp.code.eq:200
+	httpqlQuery := `req.method.eq:"POST" AND resp.code.eq:200`
+	results, err = storageAddon.Service.Search(httpqlQuery)
+	if err != nil {
+		t.Fatalf("HTTPQL Search failed: %v", err)
+	}
+	if len(results) == 0 {
+		t.Errorf("Expected to find request by HTTPQL '%s', got 0 results", httpqlQuery)
+	}
+
+	// Negative Test for HTTPQL
+	httpqlQueryNegative := `req.method.eq:"GET"`
+	results, err = storageAddon.Service.Search(httpqlQueryNegative)
+	if err != nil {
+		t.Fatalf("HTTPQL Negative Search failed: %v", err)
+	}
+	if len(results) > 0 {
+		t.Errorf("Expected 0 results for HTTPQL '%s', got %d", httpqlQueryNegative, len(results))
+	}
 }

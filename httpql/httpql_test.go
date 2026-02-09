@@ -1,0 +1,243 @@
+package httpql
+
+import (
+	"net/url"
+	"testing"
+
+	"github.com/retutils/gomitmproxy/proxy"
+	uuid "github.com/satori/go.uuid"
+)
+
+func TestLexer(t *testing.T) {
+	tests := []struct {
+		input    string
+		expected []string
+	}{
+		{
+			input: `req.method.eq:"POST"`,
+			expected: []string{
+				"req", ".", "method", ".", "eq", ":", "POST", "",
+			},
+		},
+		{
+			input: `(req.host.cont:"api" AND resp.code.gte:400)`,
+			expected: []string{
+				"(", "req", ".", "host", ".", "cont", ":", "api",
+				"and",
+				"resp", ".", "code", ".", "gte", ":", "400", ")", "",
+			},
+		},
+		{
+			input: `req.port.eq:8080 OR req.tls.eq:true`,
+			expected: []string{
+				"req", ".", "port", ".", "eq", ":", "8080",
+				"or",
+				"req", ".", "tls", ".", "eq", ":", "true", "",
+			},
+		},
+	}
+
+	for i, tt := range tests {
+		lexer := NewLexer(tt.input)
+		for j, exp := range tt.expected {
+			tok := lexer.NextToken()
+			if tok.Literal != exp {
+				t.Errorf("Test %d: Expected token %d to be %q, got %q (Type: %d)", i, j, exp, tok.Literal, tok.Type)
+			}
+		}
+	}
+}
+
+func TestParser(t *testing.T) {
+	tests := []struct {
+		name      string
+		input     string
+		shouldErr bool
+		check     func(*Query) bool
+	}{
+		{
+			name:  "Simple Request",
+			input: `req.method.eq:"GET"`,
+			check: func(q *Query) bool {
+				return q.Req != nil && q.Req.Method != nil && q.Req.Method.Value == "GET" && q.Req.Method.Operator == OpEq
+			},
+		},
+		{
+			name:  "Simple Response",
+			input: `resp.code.ne:200`,
+			check: func(q *Query) bool {
+				return q.Resp != nil && q.Resp.StatusCode != nil && q.Resp.StatusCode.Value == 200 && q.Resp.StatusCode.Operator == OpIntNe
+			},
+		},
+		{
+			name:  "AND Logic",
+			input: `req.method.eq:"POST" AND req.path.like:"/api/*"`,
+			check: func(q *Query) bool {
+				return len(q.And) == 2 && q.And[0].Req.Method.Value == "POST" && q.And[1].Req.Path.Operator == OpLike
+			},
+		},
+		{
+			name:  "OR Logic",
+			input: `resp.code.eq:404 OR resp.code.eq:500`,
+			check: func(q *Query) bool {
+				return len(q.Or) == 2
+			},
+		},
+		{
+			name:  "Nested Logic (Parens)",
+			input: `req.method.eq:"POST" AND (resp.code.eq:200 OR resp.code.eq:201)`,
+			check: func(q *Query) bool {
+				return len(q.And) == 2 && len(q.And[1].Or) == 2
+			},
+		},
+		{
+			name:      "Invalid Field",
+			input:     `req.unknown.eq:"foo"`,
+			shouldErr: true,
+		},
+		{
+			name:      "Invalid Operator Syntax",
+			input:     `req.method.eq`,
+			shouldErr: true,
+		},
+		{
+			name:      "Missing value",
+			input:     `req.method.eq:`,
+			shouldErr: false, // implementation detail: scanner might return empty string or error? actually scanner.Scan() on empty might be EOF. Let's see behavior
+			// If input ends with :, next token is EOF. parser expects value.
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := NewLexer(tt.input)
+			p := NewParser(l)
+			q, err := p.ParseQuery()
+
+			if tt.shouldErr {
+				if err == nil {
+					t.Errorf("Expected error but got none")
+				}
+			} else {
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+				}
+				if q != nil && tt.check != nil {
+					if !tt.check(q) {
+						t.Errorf("Query check failed for input: %s", tt.input)
+					}
+				}
+			}
+		})
+	}
+}
+
+func TestEvaluator(t *testing.T) {
+	// Setup Mock Flow
+	flow := &proxy.Flow{
+		Id: uuid.NewV4(),
+		Request: &proxy.Request{
+			Method: "POST",
+			URL: &url.URL{
+				Scheme: "https",
+				Host:   "api.example.com",
+				Path:   "/v1/users",
+			},
+			Proto: "HTTP/1.1",
+		},
+		Response: &proxy.Response{
+			StatusCode: 201,
+		},
+	}
+
+	tests := []struct {
+		name     string
+		query    string
+		expected bool
+	}{
+		// String Exact Matches
+		{"Method Eq", `req.method.eq:"POST"`, true},
+		{"Method Ne", `req.method.ne:"GET"`, true},
+		{"Method Eq False", `req.method.eq:"GET"`, false},
+		
+		// String Contains
+		{"Host Cont", `req.host.cont:"example"`, true},
+		{"Host Cont False", `req.host.cont:"google"`, false},
+		{"Host NCont", `req.host.ncont:"google"`, true},
+
+		// String Like (Wildcard)
+		{"Path Like", `req.path.like:"/v1/*"`, true},
+		{"Path Like Mid", `req.path.like:"*/users"`, true},
+		{"Path Like False", `req.path.like:"/v2/*"`, false},
+
+		// String Regex
+		{"Host Regex", `req.host.regex:"^api\..+\.com$"`, true},
+		{"Host Regex False", `req.host.regex:"^www\."`, false},
+
+		// Int Comparisons
+		{"Status Eq", `resp.code.eq:201`, true},
+		{"Status Gt Link", `resp.code.gt:200`, true},
+		{"Status Lt", `resp.code.lt:300`, true},
+		{"Status Gte", `resp.code.gte:201`, true},
+		{"Status Lte", `resp.code.lte:201`, true},
+		{"Status Eq False", `resp.code.eq:200`, false},
+
+		// Logical Ops
+		{"AND True", `req.method.eq:"POST" AND resp.code.eq:201`, true},
+		{"AND False", `req.method.eq:"POST" AND resp.code.eq:200`, false},
+		{"OR True 1", `req.method.eq:"GET" OR resp.code.eq:201`, true}, // 2nd true
+		{"OR True 2", `req.method.eq:"POST" OR resp.code.eq:500`, true}, // 1st true
+		{"OR False", `req.method.eq:"GET" OR resp.code.eq:500`, false},
+
+		// Nested
+		{"Nested True", `req.host.cont:"example" AND (resp.code.eq:200 OR resp.code.eq:201)`, true},
+		{"Nested False", `req.host.cont:"example" AND (resp.code.eq:400 OR resp.code.eq:404)`, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			l := NewLexer(tt.query)
+			p := NewParser(l)
+			q, err := p.ParseQuery()
+			if err != nil {
+				t.Fatalf("Parse error: %v", err)
+			}
+			
+			result := q.Eval(flow)
+			if result != tt.expected {
+				t.Errorf("Eval(%s) = %v; want %v", tt.query, result, tt.expected)
+			}
+		})
+	}
+}
+
+func TestEvaluator_NilResponse(t *testing.T) {
+	// Flow with no response (e.g. intercepted request)
+	flow := &proxy.Flow{
+		Request: &proxy.Request{
+			Method: "GET",
+			URL: &url.URL{Host: "example.com"},
+		},
+		Response: nil,
+	}
+
+	// Should safely return false for response checks
+	query := `resp.code.eq:200`
+	l := NewLexer(query)
+	p := NewParser(l)
+	q, _ := p.ParseQuery()
+	
+	if q.Eval(flow) {
+		t.Errorf("Eval should return false for nil response")
+	}
+
+	// Should still work for request checks
+	query2 := `req.method.eq:"GET"`
+	l2 := NewLexer(query2)
+	p2 := NewParser(l2)
+	q2, _ := p2.ParseQuery()
+
+	if !q2.Eval(flow) {
+		t.Errorf("Eval should return true for request check even if response is nil")
+	}
+}

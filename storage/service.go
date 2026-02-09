@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/blevesearch/bleve/v2"
+	"github.com/blevesearch/bleve/v2/search/query"
 	_ "github.com/marcboeker/go-duckdb"
+	"github.com/retutils/gomitmproxy/httpql"
 	"github.com/retutils/gomitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
 )
@@ -62,12 +64,26 @@ func NewService(storageDir string) (*Service, error) {
 		textFieldMapping := bleve.NewTextFieldMapping()
 		textFieldMapping.Analyzer = "standard"
 
+		// Lowercase Keyword Mapping for exact matches
+		keywordFieldMapping := bleve.NewTextFieldMapping()
+		keywordFieldMapping.Analyzer = "keyword"
+
 		// Document Mapping
 		docMapping := bleve.NewDocumentMapping()
-		docMapping.AddFieldMappingsAt("Method", textFieldMapping)
+		docMapping.AddFieldMappingsAt("Method", keywordFieldMapping)
 		docMapping.AddFieldMappingsAt("URL", textFieldMapping)
+		docMapping.AddFieldMappingsAt("Host", textFieldMapping)
+		docMapping.AddFieldMappingsAt("Path", textFieldMapping)
+		docMapping.AddFieldMappingsAt("Query", textFieldMapping)
 		docMapping.AddFieldMappingsAt("ReqBody", textFieldMapping)
 		docMapping.AddFieldMappingsAt("ResBody", textFieldMapping)
+
+		// Numeric Fields
+		numericFieldMapping := bleve.NewNumericFieldMapping()
+		docMapping.AddFieldMappingsAt("Status", numericFieldMapping)
+		docMapping.AddFieldMappingsAt("ReqLen", numericFieldMapping)
+		docMapping.AddFieldMappingsAt("RespLen", numericFieldMapping)
+		docMapping.AddFieldMappingsAt("Port", numericFieldMapping)
 
 		// Headers Mapping (Dynamic)
 		headerMapping := bleve.NewDocumentMapping()
@@ -77,10 +93,6 @@ func NewService(storageDir string) (*Service, error) {
 		docMapping.AddSubDocumentMapping("ReqHeader", headerMapping)
 		docMapping.AddSubDocumentMapping("ResHeader", headerMapping)
 		
-		// Status Code (Numeric)
-		numericFieldMapping := bleve.NewNumericFieldMapping()
-		docMapping.AddFieldMappingsAt("Status", numericFieldMapping)
-
 		mapping.DefaultMapping = docMapping
 
 		index, err = bleve.New(indexPath, mapping)
@@ -137,13 +149,22 @@ func (s *Service) Save(f *proxy.Flow) error {
 		resHeaderMap = make(map[string]interface{})
 	}
 
+	// Parse URL for indexing
+	parsedURL := f.Request.URL
+	
 	// 2. Index in Bleve
 	// We index relevant fields for search
 	doc := struct {
 		ID        string
 		Method    string
 		URL       string
+		Host      string
+		Path      string
+		Query     string
+		Port      int
 		Status    int
+		ReqLen    int
+		RespLen   int
 		ReqBody   string
 		ResBody   string
 		ReqHeader map[string]interface{}
@@ -152,11 +173,23 @@ func (s *Service) Save(f *proxy.Flow) error {
 		ID:        entry.ID,
 		Method:    entry.Method,
 		URL:       entry.URL,
+		Host:      parsedURL.Hostname(),
+		Path:      parsedURL.Path,
+		Query:     parsedURL.RawQuery,
+		// Port - extract from Host or URLScheme
+		// Status
 		Status:    entry.StatusCode,
-		ReqBody:   string(entry.RequestBody), // Only suitable for text content really, but bleve handles string
+		ReqLen:    len(entry.RequestBody),
+		RespLen:   len(entry.ResponseBody),
+		ReqBody:   string(entry.RequestBody), 
 		ResBody:   string(entry.ResponseBody),
 		ReqHeader: reqHeaderMap,
 		ResHeader: resHeaderMap,
+	}
+	
+	// Try parse port
+	if portStr := parsedURL.Port(); portStr != "" {
+		fmt.Sscanf(portStr, "%d", &doc.Port)
 	}
 
 	if err := s.index.Index(entry.ID, doc); err != nil {
@@ -169,8 +202,20 @@ func (s *Service) Save(f *proxy.Flow) error {
 
 func (s *Service) Search(queryStr string) ([]*FlowEntry, error) {
 	// 1. Search in Bleve to get IDs
-	query := bleve.NewQueryStringQuery(queryStr)
-	searchRequest := bleve.NewSearchRequest(query)
+	var indexQuery query.Query
+
+	// Try parsing as HTTPQL
+	l := httpql.NewLexer(queryStr)
+	p := httpql.NewParser(l)
+	qlQuery, err := p.ParseQuery()
+	if err == nil {
+		indexQuery = BuildBleveQuery(qlQuery)
+	} else {
+		// Fallback to standard Bleve Query String
+		indexQuery = bleve.NewQueryStringQuery(queryStr)
+	}
+
+	searchRequest := bleve.NewSearchRequest(indexQuery)
 	searchResult, err := s.index.Search(searchRequest)
 	if err != nil {
 		return nil, err
