@@ -12,7 +12,7 @@
 
 [English](./README.md)
 
-# go-mitmproxy
+# gomitmproxy
 
 <div align="center" markdown="1">
    <a href="https://apps.apple.com/cn/app/sqlman-mysql-gui-%E6%95%B0%E6%8D%AE%E5%BA%93%E5%AE%A2%E6%88%B7%E7%AB%AF/id6498632117?mt=12">
@@ -26,7 +26,7 @@
 
 [English](./README.md)
 
-`go-mitmproxy` 是一个功能强大的 [mitmproxy](https://mitmproxy.org/) Golang 实现。它是一个通用的工具，用于拦截、检查、修改和重放 HTTP/HTTPS 流量。它支持强大的插件系统，可以通过 Go 轻松扩展功能。
+`gomitmproxy` 是一个受 [mitmproxy](https://mitmproxy.org/) 启发，使用 Golang 实现的高性能中间人代理工具。它不仅是一个通用的流量拦截、检查、修改和重放工具，更是一个独立的、高度可扩展的解决方案，支持通过 Go 语言编写插件来轻松扩展功能。
 
 ## ✨ 主要功能
 
@@ -54,7 +54,7 @@ go install github.com/retutils/gomitmproxy/cmd/go-mitmproxy@latest
 git clone https://github.com/retutils/gomitmproxy.git
 cd gomitmproxy
 go mod tidy
-go build -o go-mitmproxy ./cmd/go-mitmproxy
+go build -o gomitmproxy ./cmd/go-mitmproxy
 ```
 
 ## 🚀 命令行使用
@@ -62,7 +62,7 @@ go build -o go-mitmproxy ./cmd/go-mitmproxy
 使用默认设置启动代理服务器（代理：:9080，Web UI：:9081）：
 
 ```bash
-go-mitmproxy
+gomitmproxy
 ```
 
 ### 常用参数
@@ -82,7 +82,7 @@ go-mitmproxy
 查看所有可用选项：
 
 ```bash
-go-mitmproxy -h
+gomitmproxy -h
 ```
 
 ### 证书设置
@@ -95,22 +95,22 @@ go-mitmproxy -h
 
 **使用:**
 ```bash
-go-mitmproxy -tls_fingerprint chrome
+gomitmproxy -tls_fingerprint chrome
 ```
 支持的预设: `chrome`, `firefox`, `edge`, `safari`, `360`, `qq`, `ios`, `android`, `random`, `client`.
 
 **自定义指纹:**
 您可以捕获真实指纹并在以后使用。
-1. **捕获**: `go-mitmproxy -fingerprint_save my_fingerprint`
-2. **列表**: `go-mitmproxy -fingerprint_list`
-3. **使用**: `go-mitmproxy -tls_fingerprint my_fingerprint`
+1. **捕获**: `gomitmproxy -fingerprint_save my_fingerprint`
+2. **列表**: `gomitmproxy -fingerprint_list`
+3. **使用**: `gomitmproxy -tls_fingerprint my_fingerprint`
 
 ### 2. 流量存储与搜索
 使用本地数据库 DuckDB 和 Bleve 持久化流量历史并进行搜索。
 
 **启用存储:**
 ```bash
-go-mitmproxy -storage_dir ./data
+gomitmproxy -storage_dir ./data
 ```
 
 **搜索:**
@@ -119,10 +119,10 @@ go-mitmproxy -storage_dir ./data
 
 ```bash
 # 搜索特定端点的 POST 请求
-go-mitmproxy -storage_dir ./data -search "Method:POST +URL:api"
+gomitmproxy -storage_dir ./data -search "Method:POST +URL:api"
 
 # 搜索特定头部值
-go-mitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
+gomitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
 ```
 
 ### 3. Map Remote (远程映射)
@@ -145,7 +145,7 @@ go-mitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
   ]
 }
 ```
-**运行:** `go-mitmproxy -map_remote map_remote.json`
+**运行:** `gomitmproxy -map_remote map_remote.json`
 
 ### 4. Map Local (本地映射)
 为特定请求服务本地文件。
@@ -168,11 +168,11 @@ go-mitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
   ]
 }
 ```
-**运行:** `go-mitmproxy -map_local map_local.json`
+**运行:** `gomitmproxy -map_local map_local.json`
 
 ## 📚 库使用
 
-您可以将 `go-mitmproxy` 用作库来构建自定义代理工具。
+您可以将 `gomitmproxy` 用作库来构建自定义代理工具。
 
 ### 基础示例
 
@@ -220,7 +220,7 @@ type MyAddon struct {
 // 实现您需要的方法
 func (a *MyAddon) Request(f *proxy.Flow) {
     if f.Request.URL.Host == "example.com" {
-        f.Request.Header.Add("X-Intercepted-By", "Go-Mitmproxy")
+        f.Request.Header.Add("X-Intercepted-By", "gomitmproxy")
     }
 }
 

@@ -1,4 +1,4 @@
-# go-mitmproxy
+# gomitmproxy
 
 <div align="center" markdown="1">
    <a href="https://apps.apple.com/us/app/sqlman-mysql-database-gui/id6498632117?mt=12">
@@ -12,7 +12,7 @@
 
 [简体中文](./README_CN.md)
 
-`go-mitmproxy` is a robust Golang implementation of [mitmproxy](https://mitmproxy.org/). It serves as a versatile tool for intercepting, inspecting, modifying, and replaying HTTP/HTTPS traffic. It supports a powerful plugin system, making it easy to extend functionality using Go.
+`gomitmproxy` is a robust Golang implementation of a man-in-the-middle proxy, inspired by [mitmproxy](https://mitmproxy.org/). It serves as a versatile, standalone tool for intercepting, inspecting, modifying, and replaying HTTP/HTTPS traffic. Built with performance and extensibility in mind, it supports a powerful plugin system, making it easy to extend functionality using Go.
 
 ## ✨ Key Features
 
@@ -40,7 +40,7 @@ go install github.com/retutils/gomitmproxy/cmd/go-mitmproxy@latest
 git clone https://github.com/retutils/gomitmproxy.git
 cd gomitmproxy
 go mod tidy
-go build -o go-mitmproxy ./cmd/go-mitmproxy
+go build -o gomitmproxy ./cmd/go-mitmproxy
 ```
 
 ## 🚀 Command Line Usage
@@ -48,7 +48,7 @@ go build -o go-mitmproxy ./cmd/go-mitmproxy
 Start the proxy server with default settings (Proxy: :9080, Web UI: :9081):
 
 ```bash
-go-mitmproxy
+gomitmproxy
 ```
 
 ### Common Flags
@@ -68,7 +68,7 @@ go-mitmproxy
 View all available options:
 
 ```bash
-go-mitmproxy -h
+gomitmproxy -h
 ```
 
 ### Certificate Setup
@@ -81,22 +81,22 @@ Evade fingerprint-based blocking by mimicking real browsers.
 
 **Usage:**
 ```bash
-go-mitmproxy -tls_fingerprint chrome
+gomitmproxy -tls_fingerprint chrome
 ```
 Supported presets: `chrome`, `firefox`, `edge`, `safari`, `360`, `qq`, `ios`, `android`, `random`, `client`.
 
 **Custom Fingerprints:**
 You can capture a real fingerprint and use it later.
-1. **Capture**: `go-mitmproxy -fingerprint_save my_fingerprint`
-2. **List**: `go-mitmproxy -fingerprint_list`
-3. **Use**: `go-mitmproxy -tls_fingerprint my_fingerprint`
+1. **Capture**: `gomitmproxy -fingerprint_save my_fingerprint`
+2. **List**: `gomitmproxy -fingerprint_list`
+3. **Use**: `gomitmproxy -tls_fingerprint my_fingerprint`
 
 ### 2. Flow Storage & Search
 Persist traffic history and search through it using a local database usage DuckDB and Bleve.
 
 **Enable Storage:**
 ```bash
-go-mitmproxy -storage_dir ./data
+gomitmproxy -storage_dir ./data
 ```
 
 **Search:**
@@ -105,10 +105,10 @@ Available fields: `Method`, `URL`, `Status`, `ReqBody`, `ResBody`, `ReqHeader`, 
 
 ```bash
 # Search for POST requests to specific endpoint
-go-mitmproxy -storage_dir ./data -search "Method:POST +URL:api"
+gomitmproxy -storage_dir ./data -search "Method:POST +URL:api"
 
 # Search for specific header value
-go-mitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
+gomitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
 ```
 
 ### 3. Map Remote
@@ -131,7 +131,7 @@ Rewrite request locations to different destinations based on rules.
   ]
 }
 ```
-**Run:** `go-mitmproxy -map_remote map_remote.json`
+**Run:** `gomitmproxy -map_remote map_remote.json`
 
 ### 4. Map Local
 Serve local files for specific requests.
@@ -154,11 +154,11 @@ Serve local files for specific requests.
   ]
 }
 ```
-**Run:** `go-mitmproxy -map_local map_local.json`
+**Run:** `gomitmproxy -map_local map_local.json`
 
 ## 📚 Library Usage
 
-You can use `go-mitmproxy` as a library to build custom proxy tools.
+You can use `gomitmproxy` as a library to build custom proxy tools.
 
 ### Basic Example
 
