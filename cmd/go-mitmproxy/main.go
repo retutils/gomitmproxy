@@ -62,6 +62,8 @@ func main() {
 		os.Exit(0)
 	}
 
+
+
 	if config.Search != "" {
 		if config.StorageDir == "" {
 			fmt.Println("-storage_dir is required for search")
