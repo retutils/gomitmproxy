@@ -87,16 +87,32 @@ Persist traffic history and search through it using a local database usage DuckD
 gomitmproxy -storage_dir ./data
 ```
 
-**Search:**
-You can search the stored flows using valid Bleve query syntax.
-Available fields: `Method`, `URL`, `Status`, `ReqBody`, `ResBody`, `ReqHeader`, `ResHeader`.
+**Search (HTTPQL):**
+You can search the stored flows using the powerful **HTTPQL** syntax.
+
+Available fields:
+- `req.method`
+- `req.host`
+- `req.path`
+- `req.query`
+- `req.body`
+- `resp.code`
+- `resp.body`
+
+Operators: `eq`, `ne`, `cont`, `ncont`, `like` (glob), `regex`, `gt`, `lt`, `gte`, `lte`.
 
 ```bash
-# Search for POST requests to specific endpoint
-gomitmproxy -storage_dir ./data -search "Method:POST +URL:api"
+# Search for POST requests
+gomitmproxy -storage_dir ./data -search 'req.method.eq:"POST"'
 
-# Search for specific header value
-gomitmproxy -storage_dir ./data -search "ReqHeader.Content-Type:json"
+# Search for requests containing "api" in host and 200 OK response
+gomitmproxy -storage_dir ./data -search 'req.host.cont:"api" AND resp.code.eq:200'
+
+# Search request body for a specific user ID
+gomitmproxy -storage_dir ./data -search 'req.body.cont:"user_id:12345"'
+
+# Search response body using wildcard (glob)
+gomitmproxy -storage_dir ./data -search 'resp.body.like:"*error*"'
 ```
 
 ### 3. Map Remote
