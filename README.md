@@ -115,6 +115,8 @@ gomitmproxy -storage_dir ./data -search 'req.body.cont:"user_id:12345"'
 gomitmproxy -storage_dir ./data -search 'resp.body.like:"*error*"'
 ```
 
+See [HTTPQL Documentation](./docs/httpql.md) for full syntax reference.
+
 ### 3. Map Remote
 Rewrite request locations to different destinations based on rules.
 
