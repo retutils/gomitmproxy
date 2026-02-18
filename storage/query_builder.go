@@ -12,13 +12,13 @@ func BuildBleveQuery(q *httpql.Query) query.Query {
 
 	if len(q.And) > 0 || len(q.Or) > 0 {
 		bq := query.NewBooleanQuery(nil, nil, nil)
-		
+
 		if len(q.And) == 2 {
 			left := BuildBleveQuery(q.And[0])
 			right := BuildBleveQuery(q.And[1])
 			bq.AddMust(left, right)
 		}
-		
+
 		if len(q.Or) == 2 {
 			left := BuildBleveQuery(q.Or[0])
 			right := BuildBleveQuery(q.Or[1])
@@ -111,7 +111,7 @@ func buildStringQuery(field string, s *httpql.StringExpr) query.Query {
 		// If field is "ReqBody" or "ResBody" (standard), Wildcard *foo* only matches if 'foo' is a token.
 		// Better approach for standard text: MatchQuery (matches tokens) or specialized logic.
 		// For consistency with "Contains", if it's a phrase, we probably want MatchPhrase.
-		
+
 		if field == "Method" {
 			wq := query.NewWildcardQuery("*" + s.Value + "*")
 			wq.SetField(field)
@@ -132,11 +132,7 @@ func buildStringQuery(field string, s *httpql.StringExpr) query.Query {
 
 	case httpql.OpLike:
 		// Convert SQL Like to wildcard if simple, or Regex
-		// Simple conversion: % -> *
-		val := s.Value
-		// val = strings.ReplaceAll(val, "%", "*") // Bleve wildcard uses * 
-		// Actually best to use Regexp query for full LIKE support
-		regex := convertLikeToRegex(val)
+		regex := httpql.ConvertLikeToRegex(s.Value)
 		rq := query.NewRegexpQuery(regex)
 		rq.SetField(field)
 		return rq
@@ -151,47 +147,48 @@ func buildStringQuery(field string, s *httpql.StringExpr) query.Query {
 
 func buildIntQuery(field string, i *httpql.IntExpr) query.Query {
 	val := float64(i.Value)
-	inclusive := true
 
-	switch i.Operator {
-	case httpql.OpIntEq:
-		nq := query.NewNumericRangeQuery(&val, &val)
-		nq.InclusiveMin = &inclusive
-		nq.InclusiveMax = &inclusive
-		nq.SetField(field)
-		return nq
-	case httpql.OpIntNe:
+	// Handle NE (Not Equals) separately as it requires boolean logic
+	if i.Operator == httpql.OpIntNe {
 		q := buildIntQuery(field, &httpql.IntExpr{Value: i.Value, Operator: httpql.OpIntEq})
 		bq := query.NewBooleanQuery(nil, nil, nil)
 		bq.AddMustNot(q)
 		return bq
-	case httpql.OpIntGt:
-		nq := query.NewNumericRangeQuery(&val, nil)
-		nq.InclusiveMin = &msgFalse
-		nq.SetField(field)
-		return nq
-	case httpql.OpIntGte:
-		nq := query.NewNumericRangeQuery(&val, nil)
-		nq.InclusiveMin = &inclusive
-		nq.SetField(field)
-		return nq
-	case httpql.OpIntLt:
-		nq := query.NewNumericRangeQuery(nil, &val)
-		nq.InclusiveMax = &msgFalse
-		nq.SetField(field)
-		return nq
-	case httpql.OpIntLte:
-		nq := query.NewNumericRangeQuery(nil, &val)
-		nq.InclusiveMax = &inclusive
-		nq.SetField(field)
-		return nq
 	}
-	return query.NewMatchAllQuery()
+
+	var min, max *float64
+	var minIncl, maxIncl *bool
+
+	switch i.Operator {
+	case httpql.OpIntEq:
+		min, max = &val, &val
+		minIncl, maxIncl = &msgTrue, &msgTrue
+	case httpql.OpIntGt:
+		min = &val
+		minIncl = &msgFalse
+	case httpql.OpIntGte:
+		min = &val
+		minIncl = &msgTrue
+	case httpql.OpIntLt:
+		max = &val
+		maxIncl = &msgFalse
+	case httpql.OpIntLte:
+		max = &val
+		maxIncl = &msgTrue
+	default:
+		return query.NewMatchAllQuery()
+	}
+
+	nq := query.NewNumericRangeQuery(min, max)
+	if minIncl != nil {
+		nq.InclusiveMin = minIncl
+	}
+	if maxIncl != nil {
+		nq.InclusiveMax = maxIncl
+	}
+	nq.SetField(field)
+	return nq
 }
 
 var msgFalse = false
 var msgTrue = true
-
-func convertLikeToRegex(like string) string {
-	return httpql.ConvertLikeToRegex(like)
-}

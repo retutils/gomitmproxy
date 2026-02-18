@@ -45,8 +45,9 @@ func NewService(storageDir string) (*Service, error) {
 			req_body BLOB,
 			res_header JSON,
 			res_body BLOB,
-			created_at TIMESTAMP
-		)
+			created_at TIMESTAMP,
+			has_pii BOOLEAN
+		);
 	`)
 	if err != nil {
 		db.Close()
@@ -56,10 +57,10 @@ func NewService(storageDir string) (*Service, error) {
 	// 2. Initialize Bleve Index
 	indexPath := filepath.Join(storageDir, "flows.bleve")
 	var index bleve.Index
-	if _, err := os.Stat(indexPath); os.IsNotExist(err) {
+	if _, statErr := os.Stat(indexPath); os.IsNotExist(statErr) {
 		// Define Mapping
 		mapping := bleve.NewIndexMapping()
-		
+
 		// Text Field Mapping
 		textFieldMapping := bleve.NewTextFieldMapping()
 		textFieldMapping.Analyzer = "standard"
@@ -78,7 +79,8 @@ func NewService(storageDir string) (*Service, error) {
 		docMapping.AddFieldMappingsAt("ReqBody", textFieldMapping)
 		docMapping.AddFieldMappingsAt("ResBody", textFieldMapping)
 
-		// Numeric Fields
+		booleanFieldMapping := bleve.NewBooleanFieldMapping()
+		docMapping.AddFieldMappingsAt("HasPII", booleanFieldMapping)
 		numericFieldMapping := bleve.NewNumericFieldMapping()
 		docMapping.AddFieldMappingsAt("Status", numericFieldMapping)
 		docMapping.AddFieldMappingsAt("ReqLen", numericFieldMapping)
@@ -89,10 +91,10 @@ func NewService(storageDir string) (*Service, error) {
 		headerMapping := bleve.NewDocumentMapping()
 		headerMapping.Dynamic = true
 		headerMapping.DefaultAnalyzer = "standard"
-		
+
 		docMapping.AddSubDocumentMapping("ReqHeader", headerMapping)
 		docMapping.AddSubDocumentMapping("ResHeader", headerMapping)
-		
+
 		mapping.DefaultMapping = docMapping
 
 		index, err = bleve.New(indexPath, mapping)
@@ -129,13 +131,40 @@ func (s *Service) Save(f *proxy.Flow) error {
 	// 1. Save to DuckDB
 	// Note: DuckDB supports standard SQL
 	_, err = s.db.Exec(`
-		INSERT INTO flows (id, conn_id, method, url, status_code, req_header, req_body, res_header, res_body, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, entry.ID, entry.ConnID, entry.Method, entry.URL, entry.StatusCode, entry.RequestHeader, entry.RequestBody, entry.ResponseHeader, entry.ResponseBody, time.Now())
-	
+		INSERT INTO flows (id, conn_id, method, url, status_code, req_header, req_body, res_header, res_body, created_at, has_pii)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, entry.ID, entry.ConnID, entry.Method, entry.URL, entry.StatusCode, entry.RequestHeader, entry.RequestBody, entry.ResponseHeader, entry.ResponseBody, time.Now(), entry.HasPII)
+
 	if err != nil {
 		log.Errorf("failed to insert into duckdb: %v", err)
 		return err
+	}
+
+	// Save PII detections if present
+	if piiData, ok := f.Metadata["pii"]; ok {
+		// We expect []addon.PIIFinding, but since Metadata is map[string]interface{}, we might need type assertion or json roundtrip if coming from elsewhere.
+		// Since it's in-memory from same process, type assertion should work if we import addon package.
+		// But circular dependency proxy <-> addon <-> storage might be issue.
+		// Use reflection or mapstructure or just assume it's slice of structs/maps
+
+		// Simple approach: marshal/unmarshal to handle generic interface
+		bytes, _ := json.Marshal(piiData)
+		var findings []struct {
+			Source  string `json:"source"`
+			Type    string `json:"type"`
+			Snippet string `json:"snippet"`
+		}
+		json.Unmarshal(bytes, &findings)
+
+		for _, finding := range findings {
+			_, err := s.db.Exec(`
+				INSERT INTO pii_detections (flow_id, source, type, snippet)
+				VALUES (?, ?, ?, ?)
+			`, entry.ID, finding.Source, finding.Type, finding.Snippet)
+			if err != nil {
+				log.Errorf("failed to insert pii detection: %v", err)
+			}
+		}
 	}
 
 	// Unmarshal headers for indexing
@@ -143,7 +172,7 @@ func (s *Service) Save(f *proxy.Flow) error {
 	if err := json.Unmarshal([]byte(entry.RequestHeader), &reqHeaderMap); err != nil {
 		reqHeaderMap = make(map[string]interface{})
 	}
-	
+
 	var resHeaderMap map[string]interface{}
 	if err := json.Unmarshal([]byte(entry.ResponseHeader), &resHeaderMap); err != nil {
 		resHeaderMap = make(map[string]interface{})
@@ -151,7 +180,7 @@ func (s *Service) Save(f *proxy.Flow) error {
 
 	// Parse URL for indexing
 	parsedURL := f.Request.URL
-	
+
 	// 2. Index in Bleve
 	// We index relevant fields for search
 	doc := struct {
@@ -169,24 +198,26 @@ func (s *Service) Save(f *proxy.Flow) error {
 		ResBody   string
 		ReqHeader map[string]interface{}
 		ResHeader map[string]interface{}
+		HasPII    bool
 	}{
-		ID:        entry.ID,
-		Method:    entry.Method,
-		URL:       entry.URL,
-		Host:      parsedURL.Hostname(),
-		Path:      parsedURL.Path,
-		Query:     parsedURL.RawQuery,
+		ID:     entry.ID,
+		Method: entry.Method,
+		URL:    entry.URL,
+		Host:   parsedURL.Hostname(),
+		Path:   parsedURL.Path,
+		Query:  parsedURL.RawQuery,
 		// Port - extract from Host or URLScheme
 		// Status
 		Status:    entry.StatusCode,
 		ReqLen:    len(entry.RequestBody),
 		RespLen:   len(entry.ResponseBody),
-		ReqBody:   string(entry.RequestBody), 
+		ReqBody:   string(entry.RequestBody),
 		ResBody:   string(entry.ResponseBody),
 		ReqHeader: reqHeaderMap,
 		ResHeader: resHeaderMap,
+		HasPII:    entry.HasPII,
 	}
-	
+
 	// Try parse port
 	if portStr := parsedURL.Port(); portStr != "" {
 		fmt.Sscanf(portStr, "%d", &doc.Port)
@@ -233,10 +264,10 @@ func (s *Service) Search(queryStr string) ([]*FlowEntry, error) {
 	// 2. Retrieve from DuckDB
 	// DuckDB doesn't support array parameter easily in standard sql driver, so we loop or build query
 	// Using loop for simplicity for now, optimal way is likely WHERE id IN (...)
-	
+
 	// Construct WHERE IN clause safely?
 	// For simplicity in this iteration, let's just loop. It's not efficient for large result sets but works.
-	
+
 	results := make([]*FlowEntry, 0, len(ids))
 	for _, id := range ids {
 		row := s.db.QueryRow(`
@@ -247,7 +278,7 @@ func (s *Service) Search(queryStr string) ([]*FlowEntry, error) {
 		var e FlowEntry
 		var reqBody, resBody []byte
 		var reqHeader, resHeader interface{}
-		
+
 		err := row.Scan(&e.ID, &e.ConnID, &e.Method, &e.URL, &e.StatusCode, &reqHeader, &reqBody, &resHeader, &resBody)
 		if err != nil {
 			if err == sql.ErrNoRows {

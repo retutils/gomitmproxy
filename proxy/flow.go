@@ -32,7 +32,7 @@ func NewRequest(req *http.Request) *Request {
 }
 
 func (r *Request) SetRaw(req *http.Request) {
-    r.raw = req
+	r.raw = req
 }
 
 func (r *Request) Raw() *http.Request {
@@ -91,7 +91,6 @@ func (req *Request) UnmarshalJSON(data []byte) error {
 		header[k] = svals
 	}
 
-
 	getString := func(key string) string {
 		if v, ok := r[key].(string); ok {
 			return v
@@ -130,12 +129,16 @@ type Flow struct {
 	Stream            bool
 	UseSeparateClient bool // use separate http client to send http request
 	done              chan struct{}
+
+	// Metadata to pass data between addons. Not persisted by default unless handled by storage addon.
+	Metadata map[string]interface{}
 }
 
 func NewFlow() *Flow {
 	return &Flow{
-		Id:   uuid.NewV4(),
-		done: make(chan struct{}),
+		Id:       uuid.NewV4(),
+		done:     make(chan struct{}),
+		Metadata: make(map[string]interface{}),
 	}
 }
 

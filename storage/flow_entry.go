@@ -17,7 +17,7 @@ type FlowEntry struct {
 	URL            string    `json:"url"`
 	Proto          string    `json:"proto"`
 	StatusCode     int       `json:"status_code"`
-	RequestHeader  string    `json:"request_header"`  // JSON string
+	RequestHeader  string    `json:"request_header"` // JSON string
 	RequestBody    []byte    `json:"request_body"`
 	ResponseHeader string    `json:"response_header"` // JSON string
 	ResponseBody   []byte    `json:"response_body"`
@@ -25,6 +25,7 @@ type FlowEntry struct {
 	StartTime      time.Time `json:"start_time"`
 	EndTime        time.Time `json:"end_time"`
 	DurationMs     int64     `json:"duration_ms"`
+	HasPII         bool      `json:"has_pii"`
 }
 
 // NewFlowEntry converts a proxy.Flow to a storage-ready FlowEntry
@@ -56,6 +57,13 @@ func NewFlowEntry(f *proxy.Flow) (*FlowEntry, error) {
 	endTime := time.Now()
 	startTime := endTime // TODO: Flow doesn't expose timing yet, using current time placeholder
 
+	isPII := false
+	if val, ok := f.Metadata["pii"]; ok {
+		if v, ok := val.(bool); ok {
+			isPII = v
+		}
+	}
+
 	return &FlowEntry{
 		ID:             f.Id.String(),
 		ConnID:         f.ConnContext.Id().String(),
@@ -71,6 +79,7 @@ func NewFlowEntry(f *proxy.Flow) (*FlowEntry, error) {
 		StartTime:      startTime,
 		EndTime:        endTime,
 		DurationMs:     0,
+		HasPII:         isPII,
 	}, nil
 }
 
@@ -95,7 +104,7 @@ func (e *FlowEntry) ToProxyFlow() (*proxy.Flow, error) {
 
 	// NOTE: This reconstructs a display-only Flow, not a functional one for replay
 	// URL parsing omitted for brevity, assuming simple string reconstruction
-	
+
 	return &proxy.Flow{
 		Id: id,
 		// Request and Response would need full reconstruction if needed

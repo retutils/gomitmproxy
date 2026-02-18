@@ -40,6 +40,7 @@ func loadConfigFromCli() *Config {
 	flag.StringVar(&config.TlsFingerprint, "tls_fingerprint", "", "TLS fingerprint to emulate (chrome, firefox, ios, android, edge, 360, qq, random)")
 	flag.StringVar(&config.FingerprintSave, "fingerprint_save", "", "Save client fingerprint to file with specified name")
 	flag.BoolVar(&config.FingerprintList, "fingerprint_list", false, "List saved client fingerprints")
+	flag.BoolVar(&config.ScanPII, "scan_pii", false, "Enable PII and confidential information scanning")
 	flag.StringVar(&config.StorageDir, "storage_dir", "", "Directory to store captured flows (DuckDB + Bleve)")
 	flag.StringVar(&config.Search, "search", "", "Search query for stored flows (requires -storage_dir)")
 	flag.Parse()
@@ -103,6 +104,9 @@ func mergeConfigs(fileConfig, cliConfig *Config) *Config {
 	}
 	if cliConfig.StorageDir != "" {
 		config.StorageDir = cliConfig.StorageDir
+	}
+	if cliConfig.ScanPII {
+		config.ScanPII = cliConfig.ScanPII
 	}
 	return config
 }

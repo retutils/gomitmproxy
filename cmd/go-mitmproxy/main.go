@@ -35,12 +35,13 @@ type Config struct {
 
 	filename string // read config from the filename
 
-	ProxyAuth      string // Require proxy authentication
-	TlsFingerprint string // TLS fingerprint to emulate (chrome, firefox, ios, or random)
+	ProxyAuth       string // Require proxy authentication
+	TlsFingerprint  string // TLS fingerprint to emulate (chrome, firefox, ios, or random)
 	FingerprintSave string // Save decoding client hello to file
 	FingerprintList bool   // List saved fingerprints
 	StorageDir      string // Directory to store captured flows (DuckDB + Bleve)
 	Search          string // Search query for stored flows
+	ScanPII         bool   // Enable PII scanning (regex + AC)
 }
 
 func main() {
@@ -61,8 +62,6 @@ func main() {
 		}
 		os.Exit(0)
 	}
-
-
 
 	if config.Search != "" {
 		if config.StorageDir == "" {
@@ -89,7 +88,7 @@ func main() {
 			fmt.Printf("Found %d results:\n", len(results))
 			for _, entry := range results {
 				fmt.Printf("[%s] %s %s (Status: %d)\n", entry.ID, entry.Method, entry.URL, entry.StatusCode)
-				// Maybe print snippets or headers if verbose? 
+				// Maybe print snippets or headers if verbose?
 				// For now just ID and URL is proof of concept
 			}
 		}
@@ -153,9 +152,9 @@ func main() {
 	if config.ProxyAuth != "" && strings.ToLower(config.ProxyAuth) != "any" {
 		log.Infoln("Enable entry authentication")
 		auth, err := NewDefaultBasicAuth(config.ProxyAuth)
-        if err != nil {
-            log.Fatal(err)
-        }
+		if err != nil {
+			log.Fatal(err)
+		}
 		p.SetAuthProxy(auth.EntryAuth)
 	}
 
@@ -190,6 +189,11 @@ func main() {
 	if config.Dump != "" {
 		dumper := addon.NewDumperWithFilename(config.Dump, config.DumpLevel)
 		p.AddAddon(dumper)
+	}
+
+	if config.ScanPII {
+		p.AddAddon(addon.NewPIIAddon())
+		log.Infoln("PII scanning enabled")
 	}
 
 	if config.StorageDir != "" {

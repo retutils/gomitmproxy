@@ -30,7 +30,7 @@ func (p *Parser) ParseQuery() (*Query, error) {
 	// Expr = Term { OR Term }
 	// Term = Factor { AND Factor }
 	// Factor = ( Expr ) | Clause
-	
+
 	return p.parseOr()
 }
 
@@ -93,7 +93,7 @@ func (p *Parser) parseFactor() (*Query, error) {
 
 func (p *Parser) parseClause() (*Query, error) {
 	// Expect: req/resp . field . op : val
-	
+
 	namespace := p.curTok.Literal
 	if namespace != "req" && namespace != "resp" {
 		return nil, fmt.Errorf("expected req/resp, got %s", namespace)
@@ -133,7 +133,7 @@ func (p *Parser) parseClause() (*Query, error) {
 
 func (p *Parser) buildReqClause(field, op, val string) (*Query, error) {
 	clause := &RequestClause{}
-	
+
 	switch field {
 	case "method":
 		clause.Method = &StringExpr{Value: val, Operator: StringOp(op)}
@@ -141,38 +141,52 @@ func (p *Parser) buildReqClause(field, op, val string) (*Query, error) {
 		clause.Host = &StringExpr{Value: val, Operator: StringOp(op)}
 	case "path":
 		clause.Path = &StringExpr{Value: val, Operator: StringOp(op)}
+	case "query":
+		clause.Query = &StringExpr{Value: val, Operator: StringOp(op)}
 	case "port":
-		v, err := strconv.Atoi(val)
-		if err != nil { return nil, err }
-		clause.Port = &IntExpr{Value: v, Operator: IntOp(op)}
-	case "body", "raw", "ext": // Ext is alias for body/raw in some contexts or separate? Reference says ext is extension. 
-		// Actually reference says req.ext is extension. req.raw is full request.
-		// For now let's map body and raw to Body.
+		expr, err := parseIntExpr(val, op)
+		if err != nil {
+			return nil, err
+		}
+		clause.Port = expr
+	case "body", "raw", "ext":
 		clause.Body = &StringExpr{Value: val, Operator: StringOp(op)}
 	default:
 		return nil, fmt.Errorf("unknown req field: %s", field)
 	}
-	
+
 	return &Query{Req: clause}, nil
 }
 
 func (p *Parser) buildRespClause(field, op, val string) (*Query, error) {
 	clause := &ResponseClause{}
-	
+
 	switch field {
 	case "code":
-		v, err := strconv.Atoi(val)
-		if err != nil { return nil, err }
-		clause.StatusCode = &IntExpr{Value: v, Operator: IntOp(op)}
+		expr, err := parseIntExpr(val, op)
+		if err != nil {
+			return nil, err
+		}
+		clause.StatusCode = expr
 	case "len":
-		v, err := strconv.Atoi(val)
-		if err != nil { return nil, err }
-		clause.Length = &IntExpr{Value: v, Operator: IntOp(op)}
+		expr, err := parseIntExpr(val, op)
+		if err != nil {
+			return nil, err
+		}
+		clause.Length = expr
 	case "body", "raw":
 		clause.Body = &StringExpr{Value: val, Operator: StringOp(op)}
 	default:
 		return nil, fmt.Errorf("unknown resp field: %s", field)
 	}
-	
+
 	return &Query{Resp: clause}, nil
+}
+
+func parseIntExpr(val, op string) (*IntExpr, error) {
+	v, err := strconv.Atoi(val)
+	if err != nil {
+		return nil, err
+	}
+	return &IntExpr{Value: v, Operator: IntOp(op)}, nil
 }
