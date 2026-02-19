@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/url"
 
+	"github.com/projectdiscovery/fastdialer/fastdialer"
 	"github.com/retutils/gomitmproxy/cert"
 	"github.com/retutils/gomitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
@@ -24,6 +25,8 @@ type Options struct {
 	LogFilePath       string // Path to write logs to file
 	TlsFingerprint    string // TLS fingerprint to emulate (chrome, firefox, ios, or random)
 	FingerprintSave   string // Save decoding client hello to file
+	DnsResolvers      []string
+	DnsRetries        int
 }
 
 type Proxy struct {
@@ -33,6 +36,7 @@ type Proxy struct {
 
 	entry           *entry
 	attacker        *attacker
+	fastDialer      *fastdialer.Dialer
 	shouldIntercept func(req *http.Request) bool              // req is received by proxy.server
 	upstreamProxy   func(req *http.Request) (*url.URL, error) // req is received by proxy.server, not client request
 	authProxy       func(res http.ResponseWriter, req *http.Request) (bool, error)
@@ -59,6 +63,19 @@ func NewProxy(opts *Options) (*Proxy, error) {
 		return nil, err
 	}
 	proxy.attacker = attacker
+
+	fdOpts := fastdialer.DefaultOptions
+	if len(opts.DnsResolvers) > 0 {
+		fdOpts.BaseResolvers = opts.DnsResolvers
+	}
+	// Note: fastdialer doesn't have a direct "retries" in its options that maps easily to Net.Dialer
+	// But it has MaxRetries for some cases or we handle it in getUpstreamConn.
+	
+	dialer, err := fastdialer.NewDialer(fdOpts)
+	if err != nil {
+		return nil, err
+	}
+	proxy.fastDialer = dialer
 
 	return proxy, nil
 }

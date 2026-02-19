@@ -243,3 +243,18 @@ func TestProxy_Certificate(t *testing.T) {
         t.Error("Expected cert for example.com")
     }
 }
+
+func TestProxy_FastDialerInit(t *testing.T) {
+	opts := &Options{
+		Addr: ":0",
+	}
+	p, err := NewProxy(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// We check for unexported field using reflection or just making it exported for now?
+	// Actually, tests in same package can access unexported fields.
+	if p.fastDialer == nil {
+		t.Error("Expected fastDialer to be initialized")
+	}
+}
