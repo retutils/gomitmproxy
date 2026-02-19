@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"time"
@@ -12,9 +13,16 @@ import (
 	"github.com/blevesearch/bleve/v2/search/query"
 	_ "github.com/marcboeker/go-duckdb"
 	"github.com/retutils/gomitmproxy/httpql"
-	"github.com/retutils/gomitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
 )
+
+type HostTechnology struct {
+	Hostname     string    `json:"hostname"`
+	TechName     string    `json:"tech_name"`
+	Version      string    `json:"version"`
+	Categories   string    `json:"categories"`
+	LastDetected time.Time `json:"last_detected"`
+}
 
 type Service struct {
 	db    *sql.DB
@@ -33,7 +41,7 @@ func NewService(storageDir string) (*Service, error) {
 		return nil, fmt.Errorf("failed to open duckdb: %w", err)
 	}
 
-	// Create table if not exists
+	// Create tables if not exist
 	_, err = db.Exec(`
 		CREATE TABLE IF NOT EXISTS flows (
 			id TEXT PRIMARY KEY,
@@ -47,6 +55,20 @@ func NewService(storageDir string) (*Service, error) {
 			res_body BLOB,
 			created_at TIMESTAMP,
 			has_pii BOOLEAN
+		);
+		CREATE TABLE IF NOT EXISTS pii_detections (
+			flow_id TEXT,
+			source TEXT,
+			type TEXT,
+			snippet TEXT
+		);
+		CREATE TABLE IF NOT EXISTS host_technologies (
+			hostname TEXT,
+			tech_name TEXT,
+			version TEXT,
+			categories TEXT,
+			last_detected TIMESTAMP,
+			PRIMARY KEY (hostname, tech_name)
 		);
 	`)
 	if err != nil {
@@ -122,15 +144,10 @@ func (s *Service) Close() error {
 	return nil
 }
 
-func (s *Service) Save(f *proxy.Flow) error {
-	entry, err := NewFlowEntry(f)
-	if err != nil {
-		return err
-	}
-
+func (s *Service) SaveEntry(entry *FlowEntry, piiData interface{}) error {
 	// 1. Save to DuckDB
 	// Note: DuckDB supports standard SQL
-	_, err = s.db.Exec(`
+	_, err := s.db.Exec(`
 		INSERT INTO flows (id, conn_id, method, url, status_code, req_header, req_body, res_header, res_body, created_at, has_pii)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 	`, entry.ID, entry.ConnID, entry.Method, entry.URL, entry.StatusCode, entry.RequestHeader, entry.RequestBody, entry.ResponseHeader, entry.ResponseBody, time.Now(), entry.HasPII)
@@ -141,7 +158,7 @@ func (s *Service) Save(f *proxy.Flow) error {
 	}
 
 	// Save PII detections if present
-	if piiData, ok := f.Metadata["pii"]; ok {
+	if piiData != nil {
 		// We expect []addon.PIIFinding, but since Metadata is map[string]interface{}, we might need type assertion or json roundtrip if coming from elsewhere.
 		// Since it's in-memory from same process, type assertion should work if we import addon package.
 		// But circular dependency proxy <-> addon <-> storage might be issue.
@@ -179,7 +196,10 @@ func (s *Service) Save(f *proxy.Flow) error {
 	}
 
 	// Parse URL for indexing
-	parsedURL := f.Request.URL
+	parsedURL, err := url.Parse(entry.URL)
+	if err != nil {
+		parsedURL = &url.URL{}
+	}
 
 	// 2. Index in Bleve
 	// We index relevant fields for search
@@ -206,8 +226,6 @@ func (s *Service) Save(f *proxy.Flow) error {
 		Host:   parsedURL.Hostname(),
 		Path:   parsedURL.Path,
 		Query:  parsedURL.RawQuery,
-		// Port - extract from Host or URLScheme
-		// Status
 		Status:    entry.StatusCode,
 		ReqLen:    len(entry.RequestBody),
 		RespLen:   len(entry.ResponseBody),
@@ -302,5 +320,46 @@ func (s *Service) Search(queryStr string) ([]*FlowEntry, error) {
 		results = append(results, &e)
 	}
 
+	return results, nil
+}
+
+func (s *Service) SaveHostTechnologies(hostname string, techs []HostTechnology) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, tech := range techs {
+		_, err := tx.Exec(`
+			INSERT OR REPLACE INTO host_technologies (hostname, tech_name, version, categories, last_detected)
+			VALUES (?, ?, ?, ?, ?)
+		`, hostname, tech.TechName, tech.Version, tech.Categories, time.Now())
+		if err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+func (s *Service) GetHostTechnologies(hostname string) ([]HostTechnology, error) {
+	rows, err := s.db.Query(`
+		SELECT hostname, tech_name, version, categories, last_detected
+		FROM host_technologies WHERE hostname = ?
+	`, hostname)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var results []HostTechnology
+	for rows.Next() {
+		var t HostTechnology
+		if err := rows.Scan(&t.Hostname, &t.TechName, &t.Version, &t.Categories, &t.LastDetected); err != nil {
+			return nil, err
+		}
+		results = append(results, t)
+	}
 	return results, nil
 }
