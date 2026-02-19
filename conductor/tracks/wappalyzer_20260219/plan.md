@@ -24,8 +24,8 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Core Analysis Logic' (Protocol in workflow.md)
 
 #### Phase 3: CLI & Integration
-- [ ] Task: Add `-scan_tech` flag to `cmd/go-mitmproxy/config.go` and `main.go`.
-- [ ] Task: Register `WappalyzerAddon` in `main.go` when the flag is enabled.
-- [ ] Task: Extend Search Service.
-    - [ ] Add functionality to retrieve technologies for a specific host from DuckDB.
+- [x] Task: Add `-scan_tech` flag to `cmd/go-mitmproxy/config.go` and `main.go`. [515f14c]
+- [x] Task: Register `WappalyzerAddon` in `main.go` when the flag is enabled. [515f14c]
+- [x] Task: Extend Search Service. [515f14c]
+    - [x] Add functionality to retrieve technologies for a specific host from DuckDB.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: CLI & Integration' (Protocol in workflow.md)
