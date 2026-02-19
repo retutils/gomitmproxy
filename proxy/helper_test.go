@@ -11,6 +11,34 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+func TestTransfer_Error(t *testing.T) {
+	log := logrus.NewEntry(logrus.New())
+	
+	// Mock connections that fail on read/write
+	server := &mockConn{readErr: errors.New("server read error")}
+	client := &mockConn{}
+	
+	// Should log error and return
+	transfer(log, server, client)
+}
+
+func TestTransfer_WrapClientConn(t *testing.T) {
+	log := logrus.NewEntry(logrus.New())
+	
+	server := &mockConn{}
+    p, _ := NewProxy(&Options{Addr: ":0"})
+    
+    mConn := &mockConn{}
+	client := newWrapClientConn(mConn, p)
+    client.connCtx = &ConnContext{
+        ClientConn: &ClientConn{
+            Conn: mConn,
+        },
+    }
+	
+	transfer(log, server, client)
+}
+
 func TestLogErr(t *testing.T) {
 	// Capture log output
 	var buf bytes.Buffer

@@ -12,6 +12,17 @@ import (
 	"github.com/retutils/gomitmproxy/proxy"
 )
 
+func TestStorageAddon_ResponseError(t *testing.T) {
+	sa, _ := NewStorageAddon(t.TempDir())
+	defer sa.Close()
+
+	// Induce NewFlowEntry failure by passing nil request if possible
+	f := proxy.NewFlow()
+	// f.Request is nil by default
+	sa.Response(f)
+    // It should log error but not panic
+}
+
 func TestStorageAddon_Extended(t *testing.T) {
 	// Setup
 	tempDir, err := os.MkdirTemp("", "gomitmproxy_test_ext")
@@ -40,7 +51,7 @@ func TestStorageAddon_Extended(t *testing.T) {
 	// 1. Test Saving Flow without PII (should not error)
 	t.Run("Save_No_PII", func(t *testing.T) {
 		f := createFlow()
-		err := storageAddon.Service.Save(f)
+		err := saveFlow(storageAddon, f)
 		if err != nil {
 			t.Errorf("Save failed for flow without PII: %v", err)
 		}
@@ -50,7 +61,7 @@ func TestStorageAddon_Extended(t *testing.T) {
 	t.Run("Save_Empty_PII_List", func(t *testing.T) {
 		f := createFlow()
 		f.Metadata["pii"] = []PIIFinding{}
-		err := storageAddon.Service.Save(f)
+		err := saveFlow(storageAddon, f)
 		if err != nil {
 			t.Errorf("Save failed for flow with empty PII list: %v", err)
 		}
@@ -60,7 +71,7 @@ func TestStorageAddon_Extended(t *testing.T) {
 	t.Run("Save_Invalid_PII_Type", func(t *testing.T) {
 		f := createFlow()
 		f.Metadata["pii"] = "invalid_string_instead_of_slice"
-		err := storageAddon.Service.Save(f)
+		err := saveFlow(storageAddon, f)
 		if err != nil {
 			t.Errorf("Save failed for flow with invalid PII metadata type: %v", err)
 		}
@@ -92,7 +103,7 @@ func TestStorageAddon_Extended(t *testing.T) {
 		f := createFlow()
 		u, _ := url.Parse("http://example.com:8080/foo")
 		f.Request.URL = u
-		err := storageAddon.Service.Save(f)
+		err := saveFlow(storageAddon, f)
 		if err != nil {
 			t.Errorf("Save failed for URL with port: %v", err)
 		}
@@ -104,7 +115,7 @@ func TestStorageAddon_Extended(t *testing.T) {
 		sa.Close() // Close DB and Index
 
 		f := createFlow()
-		err := sa.Service.Save(f)
+		err := saveFlow(sa, f)
 		if err == nil {
 			t.Errorf("Expected Save to fail after Close, but got nil")
 		}
@@ -145,7 +156,7 @@ func TestStorageAddon_Extended(t *testing.T) {
 		f := createFlow()
 		f.Metadata["pii"] = []PIIFinding{{Source: "body", Type: "Email"}}
 
-		err = sa.Service.Save(f)
+		err = saveFlow(sa, f)
 		if err != nil {
 			// If it returns error, that's also fine (means implementation changed to stricter)
 		}

@@ -149,6 +149,9 @@ func (p *Parser) buildReqClause(field, op, val string) (*Query, error) {
 			return nil, err
 		}
 		clause.Port = expr
+	case "tls":
+		v, _ := strconv.ParseBool(val)
+		clause.IsTLS = &BoolExpr{Value: v, Operator: BoolOp(op)}
 	case "body", "raw", "ext":
 		clause.Body = &StringExpr{Value: val, Operator: StringOp(op)}
 	default:

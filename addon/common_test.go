@@ -5,7 +5,16 @@ import (
 	"testing"
 
 	"github.com/retutils/gomitmproxy/proxy"
+	"github.com/retutils/gomitmproxy/storage"
 )
+
+func saveFlow(sa *StorageAddon, f *proxy.Flow) error {
+	entry, err := storage.NewFlowEntry(f)
+	if err != nil {
+		return err
+	}
+	return sa.Service.SaveEntry(entry, f.Metadata["pii"])
+}
 
 func TestMapFrom_Match(t *testing.T) {
 	tests := []struct {

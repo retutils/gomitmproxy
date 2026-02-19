@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -382,6 +383,258 @@ func TestAttacker_Attack_Interception_ResponseHeaders(t *testing.T) {
 	if rec.Body.String() != "intercepted-res-headers" {
 		t.Errorf("Expected 'intercepted-res-headers', got '%s'", rec.Body.String())
 	}
+}
+
+func TestAttacker_ServeHTTP_Websocket(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	a := p.attacker
+
+	req := httptest.NewRequest(http.MethodGet, "ws://example.com", nil)
+    req.Header.Set("Connection", "Upgrade")
+    req.Header.Set("Upgrade", "websocket")
+    req.Header.Set("Sec-WebSocket-Key", "dGhlIHNhbXBsZSBub25jZQ==")
+    req.Header.Set("Sec-WebSocket-Version", "13")
+
+    connCtx := &ConnContext{
+		ClientConn: &ClientConn{Conn: &mockConn{}},
+		proxy:      p,
+	}
+	req = req.WithContext(context.WithValue(req.Context(), connContextKey, connCtx))
+
+	rec := httptest.NewRecorder()
+	// This will call defaultWebSocket.wss which might fail in unit test without backend but covers the branch
+    a.ServeHTTP(rec, req)
+}
+
+func TestEntry_HttpsDialFirstAttack_EstablishError(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := p.entry
+
+	// Mock server to dial successfully
+    backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {}))
+    defer backend.Close()
+
+	req := httptest.NewRequest(http.MethodConnect, backend.URL, nil)
+	connCtx := &ConnContext{proxy: p, ClientConn: &ClientConn{}}
+	req = req.WithContext(context.WithValue(req.Context(), connContextKey, connCtx))
+
+	f := NewFlow()
+	f.Request = NewRequest(req)
+	f.ConnContext = connCtx
+
+	// establishment fails because httptest.NewRecorder is not a Hijacker
+	rec := httptest.NewRecorder()
+	e.httpsDialFirstAttack(rec, req, f)
+}
+
+func TestEntry_HttpsDialLazyAttack_Error(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := p.entry
+
+	req := httptest.NewRequest(http.MethodConnect, "https://example.com", nil)
+	connCtx := &ConnContext{proxy: p, ClientConn: &ClientConn{}}
+	req = req.WithContext(context.WithValue(req.Context(), connContextKey, connCtx))
+
+	f := NewFlow()
+	f.Request = NewRequest(req)
+	f.ConnContext = connCtx
+
+	// establishment fails because httptest.NewRecorder is not a Hijacker
+	rec := httptest.NewRecorder()
+	e.httpsDialLazyAttack(rec, req, f)
+}
+
+func TestEntry_HttpsDialFirstAttack_Error(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := p.entry
+
+	req := httptest.NewRequest(http.MethodConnect, "https://invalid-host.local", nil)
+	connCtx := &ConnContext{proxy: p, ClientConn: &ClientConn{}}
+	req = req.WithContext(context.WithValue(req.Context(), connContextKey, connCtx))
+
+	f := NewFlow()
+	f.Request = NewRequest(req)
+	f.ConnContext = connCtx
+
+	rec := httptest.NewRecorder()
+	// Should fail on httpsDial because of invalid host
+	e.httpsDialFirstAttack(rec, req, f)
+
+	if rec.Code != 502 {
+		t.Errorf("Expected 502 for dial error, got %d", rec.Code)
+	}
+}
+
+func TestEntry_DirectTransfer_Error(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := p.entry
+
+	req := httptest.NewRequest(http.MethodConnect, "http://invalid-host.local", nil)
+	connCtx := &ConnContext{proxy: p}
+	req = req.WithContext(context.WithValue(req.Context(), connContextKey, connCtx))
+
+	f := NewFlow()
+	f.Request = NewRequest(req)
+	f.ConnContext = connCtx
+
+	rec := httptest.NewRecorder()
+	// Should fail because invalid-host.local cannot be dialed
+	e.directTransfer(rec, req, f)
+
+	if rec.Code != 502 {
+		t.Errorf("Expected 502 for dial error, got %d", rec.Code)
+	}
+}
+
+func TestAttacker_Attack_SeparateClient(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	a, _ := newAttacker(p)
+
+    // Mock client transport
+    a.client.Transport = &MockTransport{
+        Response: &http.Response{
+            StatusCode: 200,
+            Body:       io.NopCloser(bytes.NewBufferString("separate")),
+            Header:     make(http.Header),
+        },
+    }
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	connCtx := &ConnContext{proxy: p}
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+	req = req.WithContext(ctx)
+
+    // Force separate client via addon
+    p.AddAddon(&MockHookAddon{
+        OnRequestheaders: func(f *Flow) {
+            f.UseSeparateClient = true
+        },
+    })
+
+	rec := httptest.NewRecorder()
+	a.attack(rec, req)
+
+	if rec.Body.String() != "separate" {
+		t.Errorf("Expected 'separate', got '%s'", rec.Body.String())
+	}
+}
+
+func TestAttacker_Attack_InvalidMethod(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	a := p.attacker
+
+	req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	connCtx := &ConnContext{proxy: p}
+	req = req.WithContext(context.WithValue(req.Context(), connContextKey, connCtx))
+
+    // Set invalid method via addon
+    p.AddAddon(&MockHookAddon{
+        OnRequestheaders: func(f *Flow) {
+            f.Request.Method = " INVALID METHOD "
+        },
+    })
+
+	rec := httptest.NewRecorder()
+	a.attack(rec, req)
+
+	if rec.Code != 502 {
+		t.Errorf("Expected 502 for invalid method, got %d", rec.Code)
+	}
+}
+
+func TestAttacker_ServerTlsHandshake_UtlsError(t *testing.T) {
+	opts := &Options{Addr: ":0", TlsFingerprint: "chrome"}
+	p, _ := NewProxy(opts)
+	a := p.attacker
+
+	connCtx := &ConnContext{
+		proxy: p,
+		ClientConn: &ClientConn{
+			clientHello: &tls.ClientHelloInfo{},
+		},
+		ServerConn: &ServerConn{
+			Conn: &mockConn{readErr: errors.New("utls handshake failed")},
+		},
+	}
+
+	err := a.serverTlsHandshake(context.Background(), connCtx)
+	if err == nil {
+		t.Error("Expected utls handshake error")
+	}
+}
+
+func TestAttacker_ServerTlsHandshake_Error(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	a := p.attacker
+
+	connCtx := &ConnContext{
+		proxy: p,
+		ClientConn: &ClientConn{
+			clientHello: &tls.ClientHelloInfo{},
+		},
+		ServerConn: &ServerConn{
+			Conn: &mockConn{readErr: errors.New("handshake failed")},
+		},
+	}
+
+	err := a.serverTlsHandshake(context.Background(), connCtx)
+	if err == nil {
+		t.Error("Expected handshake error")
+	}
+}
+
+func TestAttacker_InitHttpsDialFn_Error(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	a := p.attacker
+
+	req := httptest.NewRequest(http.MethodGet, "https://invalid-host.local", nil)
+	connCtx := &ConnContext{proxy: p}
+	req = req.WithContext(context.WithValue(req.Context(), connContextKey, connCtx))
+
+	a.initHttpsDialFn(req)
+	err := connCtx.dialFn(context.Background())
+	if err == nil {
+		t.Error("Expected dialFn to fail for invalid host")
+	}
+}
+
+func TestAttacker_Attack_ResponseBodyReadError(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	a, _ := newAttacker(p)
+
+	connCtx := &ConnContext{proxy: p}
+    serverConn := newServerConn()
+	serverConn.client = &http.Client{
+		Transport: &MockTransport{
+			Response: &http.Response{
+				StatusCode: 200,
+				Body:       io.NopCloser(&MockReader{Err: errors.New("read error")}),
+				Header:     make(http.Header),
+			},
+		},
+	}
+	connCtx.ServerConn = serverConn
+
+    req := httptest.NewRequest(http.MethodGet, "http://example.com", nil)
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+    req = req.WithContext(ctx)
+
+    rec := httptest.NewRecorder()
+    a.attack(rec, req)
+
+    if rec.Code != 502 {
+        t.Errorf("Expected 502 on response body read error, got %d", rec.Code)
+    }
 }
 
 // MockTransport allows mocking http.Client execution

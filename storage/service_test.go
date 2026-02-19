@@ -3,8 +3,10 @@ package storage
 import (
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
-	
+
 	"github.com/retutils/gomitmproxy/proxy"
 	uuid "github.com/satori/go.uuid"
 )
@@ -50,10 +52,12 @@ func TestService_SaveAndSearch(t *testing.T) {
 			},
 			Body: []byte(`{"status": "created"}`),
 		},
+		Metadata: make(map[string]interface{}),
 	}
 
 	// Test Save
-	if err := svc.Save(flow); err != nil {
+	entry, _ := NewFlowEntry(flow)
+	if err := svc.SaveEntry(entry, flow.Metadata["pii"]); err != nil {
 		t.Fatalf("Save failed: %v", err)
 	}
 
@@ -86,6 +90,16 @@ func TestService_SaveAndSearch(t *testing.T) {
 	}
 	if len(results) != 1 {
 		t.Errorf("Expected 1 result for Body search, got %d", len(results))
+	}
+
+	// Test Save with PII
+	flow.Id = uuid.NewV4()
+	flow.Metadata["pii"] = []map[string]string{
+		{"source": "body", "type": "Email", "snippet": "test@example.com"},
+	}
+	entry, _ = NewFlowEntry(flow)
+	if err := svc.SaveEntry(entry, flow.Metadata["pii"]); err != nil {
+		t.Fatalf("SaveEntry with PII failed: %v", err)
 	}
 	
 	// Test Search No Results
@@ -144,22 +158,131 @@ func TestFlowEntry_Conversion(t *testing.T) {
 	// We just check if it runs without error for now as per current implementation
 }
 
+func TestFlowEntry_ToProxyFlow_Error(t *testing.T) {
+    entry := &FlowEntry{
+        ID: "invalid-uuid",
+        RequestHeader: "{}",
+        ResponseHeader: "{}",
+    }
+    _, err := entry.ToProxyFlow()
+    if err == nil {
+        t.Error("Expected error for invalid UUID")
+    }
+
+    entry = &FlowEntry{
+        ID: uuid.NewV4().String(),
+        RequestHeader: "{invalid-json}",
+        ResponseHeader: "{}",
+    }
+    _, err = entry.ToProxyFlow()
+    if err == nil {
+        t.Error("Expected error for invalid RequestHeader JSON")
+    }
+
+    entry = &FlowEntry{
+        ID: uuid.NewV4().String(),
+        RequestHeader: "{}",
+        ResponseHeader: "{invalid-json}",
+    }
+    _, err = entry.ToProxyFlow()
+    if err == nil {
+        t.Error("Expected error for invalid ResponseHeader JSON")
+    }
+}
+
+func TestFlowEntry_NewFlowEntry_PIIBool(t *testing.T) {
+    f := &proxy.Flow{
+        Id: uuid.NewV4(),
+        ConnContext: &proxy.ConnContext{ClientConn: &proxy.ClientConn{}},
+        Request: &proxy.Request{URL: &url.URL{}},
+        Metadata: map[string]interface{}{"pii": true},
+    }
+    entry, err := NewFlowEntry(f)
+    if err != nil { t.Fatal(err) }
+    if !entry.HasPII {
+        t.Error("Expected HasPII true")
+    }
+}
+
 func TestService_Save_Error(t *testing.T) {
 	// Test handling of invalid flow (e.g. nil response if logic allows, or just verify Save handles errors)
 	tmpDir := t.TempDir()
 	svc, _ := NewService(tmpDir)
 	defer svc.Close()
 	
-	// Close DB to force error on Save
-	svc.db.Close()
-	
-	flow := &proxy.Flow{
+    flow := &proxy.Flow{
 		Id: uuid.NewV4(),
 		ConnContext: &proxy.ConnContext{ClientConn: &proxy.ClientConn{}},
 		Request: &proxy.Request{URL: &url.URL{}},
 	}
-	
-	if err := svc.Save(flow); err == nil {
+
+	// 1. Database Closed Error
+	svc.db.Close()
+	entry, _ := NewFlowEntry(flow)
+	if err := svc.SaveEntry(entry, flow.Metadata["pii"]); err == nil {
 		t.Error("Expected error when saving to closed DB, got nil")
 	}
+
+    // 2. Bleve Closed Error
+    svc2, _ := NewService(t.TempDir())
+    svc2.index.Close()
+    entry2, _ := NewFlowEntry(flow)
+    if err := svc2.SaveEntry(entry2, nil); err == nil {
+        t.Error("Expected error when indexing to closed index")
+    }
+}
+
+func TestService_Search_MissingFromDB(t *testing.T) {
+    tmpDir := t.TempDir()
+    svc, _ := NewService(tmpDir)
+    defer svc.Close()
+
+    // Save normally
+    flow := &proxy.Flow{Id: uuid.NewV4(), Request: &proxy.Request{URL: &url.URL{Host: "missing.com"}}, ConnContext: &proxy.ConnContext{ClientConn: &proxy.ClientConn{}}}
+    entry, _ := NewFlowEntry(flow)
+    svc.SaveEntry(entry, nil)
+
+    // Manually delete from DB but KEEP in index
+    svc.db.Exec("DELETE FROM flows WHERE id = ?", entry.ID)
+
+    // Search should skip the missing DB entry
+    results, err := svc.Search("missing.com")
+    if err != nil { t.Fatal(err) }
+    if len(results) != 0 {
+        t.Errorf("Expected 0 results for missing DB entry, got %d", len(results))
+    }
+}
+
+func TestService_Close_Nil(t *testing.T) {
+    s := &Service{}
+    if err := s.Close(); err != nil {
+        t.Errorf("Expected nil error for empty service close, got %v", err)
+    }
+}
+
+func TestService_Search_Error(t *testing.T) {
+    tmpDir := t.TempDir()
+    svc, _ := NewService(tmpDir)
+    // defer svc.Close() - don't defer because we close manually to trigger error
+
+    // Search on closed index
+    svc.Close()
+    _, err := svc.Search("foo")
+    if err == nil {
+        t.Error("Expected error searching closed index")
+    }
+}
+
+func TestNewService_Error(t *testing.T) {
+    // 1. Invalid path (file instead of dir)
+    tmpFile, _ := os.CreateTemp("", "blocked")
+    defer os.Remove(tmpFile.Name())
+    tmpFile.Close()
+    
+    _, err := NewService(filepath.Join(tmpFile.Name(), "subdir"))
+    if err == nil {
+        t.Error("Expected error for invalid storage path")
+    }
+
+    // 2. Schema init error (hard to trigger without mocking DB)
 }

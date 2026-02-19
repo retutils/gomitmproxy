@@ -8,6 +8,13 @@ import (
 	uuid "github.com/satori/go.uuid"
 )
 
+func TestEvaluator_NilQuery(t *testing.T) {
+    var q *Query
+    if !q.Eval(nil) {
+        t.Error("Expected true for nil query eval")
+    }
+}
+
 func TestLexer(t *testing.T) {
 	tests := []struct {
 		input    string
@@ -35,6 +42,16 @@ func TestLexer(t *testing.T) {
 				"req", ".", "tls", ".", "eq", ":", "true", "",
 			},
 		},
+        {
+			input: `NOT req.method.eq:"GET"`,
+			expected: []string{
+				"not", "req", ".", "method", ".", "eq", ":", "GET", "",
+			},
+		},
+        {
+            input: `#`,
+            expected: []string{"#", ""},
+        },
 	}
 
 	for i, tt := range tests {
@@ -46,6 +63,50 @@ func TestLexer(t *testing.T) {
 			}
 		}
 	}
+}
+
+func TestEvaluator_UnknownOperators(t *testing.T) {
+    s := &StringExpr{Value: "v", Operator: "unknown"}
+    if s.Eval("v") {
+        t.Error("Expected false for unknown operator")
+    }
+
+    i := &IntExpr{Value: 1, Operator: "unknown"}
+    if i.Eval(1) {
+        t.Error("Expected false for unknown int operator")
+    }
+
+    b := &BoolExpr{Value: true, Operator: "unknown"}
+    if b.Eval(true) {
+        t.Error("Expected false for unknown bool operator")
+    }
+}
+
+func TestParser_ErrorPaths(t *testing.T) {
+    tests := []struct {
+        name  string
+        input string
+    }{
+        {"Invalid Namespace", `unknown.field.eq:val`},
+        {"Missing Dot", `req field.eq:val`},
+        {"Invalid Colon", `req.field.eq val`},
+        {"Invalid Int", `req.port.eq:abc`},
+        {"Invalid Resp Int", `resp.code.eq:abc`},
+        {"Invalid Resp Len Int", `resp.len.eq:abc`},
+        {"Unknown Field", `req.unknown.eq:val`},
+        {"Unknown Resp Field", `resp.unknown.eq:val`},
+        {"Missing Paren", `(req.method.eq:"GET"`},
+    }
+    for _, tt := range tests {
+        t.Run(tt.name, func(t *testing.T) {
+            l := NewLexer(tt.input)
+            p := NewParser(l)
+            _, err := p.ParseQuery()
+            if err == nil {
+                t.Errorf("Expected error for %s", tt.name)
+            }
+        })
+    }
 }
 
 func TestParser(t *testing.T) {
@@ -67,6 +128,20 @@ func TestParser(t *testing.T) {
 			input: `resp.code.ne:200`,
 			check: func(q *Query) bool {
 				return q.Resp != nil && q.Resp.StatusCode != nil && q.Resp.StatusCode.Value == 200 && q.Resp.StatusCode.Operator == OpIntNe
+			},
+		},
+        {
+			name:  "Response Len",
+			input: `resp.len.gt:100`,
+			check: func(q *Query) bool {
+				return q.Resp != nil && q.Resp.Length != nil && q.Resp.Length.Value == 100
+			},
+		},
+        {
+			name:  "Response Body",
+			input: `resp.body.cont:"error"`,
+			check: func(q *Query) bool {
+				return q.Resp != nil && q.Resp.Body != nil && q.Resp.Body.Value == "error"
 			},
 		},
 		{
@@ -171,10 +246,12 @@ func TestEvaluator(t *testing.T) {
 		{"Path Like", `req.path.like:"/v1/*"`, true},
 		{"Path Like Mid", `req.path.like:"*/users"`, true},
 		{"Path Like False", `req.path.like:"/v2/*"`, false},
+		{"Path NLike", `req.path.nlike:"/v2/*"`, true},
 
 		// String Regex
 		{"Host Regex", `req.host.regex:"^api\..+\.com$"`, true},
 		{"Host Regex False", `req.host.regex:"^www\."`, false},
+		{"Host NRegex", `req.host.nregex:"^www\."`, true},
 
 		// Int Comparisons
 		{"Status Eq", `resp.code.eq:201`, true},
@@ -199,6 +276,14 @@ func TestEvaluator(t *testing.T) {
 		{"Req Body Cont", `req.body.cont:"user_id"`, true},
 		{"Req Body Eq False", `req.body.eq:"full_body"`, false},
 		{"Resp Body Like", `resp.body.like:"*created*"`, true},
+
+		// Port and TLS
+		{"Port Eq", `req.port.eq:443`, true},
+		{"TLS Eq", `req.tls.eq:true`, true},
+		{"TLS Ne", `req.tls.ne:false`, true},
+
+		// Response Length
+		{"Resp Len Gt", `resp.len.gt:10`, true},
 	}
 
 	for _, tt := range tests {

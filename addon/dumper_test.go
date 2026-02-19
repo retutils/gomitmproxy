@@ -11,12 +11,7 @@ import (
 	"go.uber.org/atomic"
 )
 
-func TestDumper(t *testing.T) {
-	// Setup
-	var buf bytes.Buffer
-	dumper := NewDumper(&buf, 1)
-
-	// Create dummy flow
+func createTestFlow() *proxy.Flow {
 	f := proxy.NewFlow()
 	f.Request = &proxy.Request{
 		Method: "POST",
@@ -33,43 +28,64 @@ func TestDumper(t *testing.T) {
 	f.ConnContext = &proxy.ConnContext{
 		FlowCount: *atomic.NewUint32(0),
 	}
-    // Need to mock Request.Raw() if possible or populate it
     req, _ := http.NewRequest("POST", "http://example.com/foo", bytes.NewReader(f.Request.Body))
     f.Request.SetRaw(req)
-
 	f.Request.Header.Set("Content-Type", "text/plain")
 	f.Response.Header.Set("Content-Type", "text/plain")
-    
-    // We need to signal done, because Requestheaders waits for it
-    go func() {
-        time.Sleep(10 * time.Millisecond)
-        f.Finish()
-    }()
+    return f
+}
 
-	dumper.Requestheaders(f)
-    
-    // Wait for dump to complete (async)
-    // Since dump happens after f.Done(), and we call f.Finish(), it should run.
-    // But we need to wait for the goroutine in Requestheaders to finish.
-    time.Sleep(100 * time.Millisecond)
+func TestDumper(t *testing.T) {
+	var buf bytes.Buffer
+	dumper := NewDumper(&buf, 1)
 
-	output := buf.String()
-	if output == "" {
-		t.Error("expected output from dumper, got empty")
-	}
-	if !contains(output, "POST /foo HTTP/1.1") {
-		t.Errorf("output missing request line. Got: %s", output)
-	}
-	if !contains(output, "request body") {
-		t.Errorf("output missing request body")
-	}
-	if !contains(output, "response body") {
-		t.Errorf("output missing response body")
+	t.Run("Standard", func(t *testing.T) {
+		buf.Reset()
+		f := createTestFlow()
+		go func() { f.Finish() }()
+		dumper.Requestheaders(f)
+		time.Sleep(100 * time.Millisecond)
+
+		output := buf.String()
+		if !contains(output, "POST /foo HTTP/1.1") || !contains(output, "request body") || !contains(output, "response body") {
+			t.Errorf("Standard dump output incorrect: %s", output)
+		}
+	})
+
+	t.Run("Binary", func(t *testing.T) {
+		buf.Reset()
+		f := createTestFlow()
+		f.Response.Header.Set("Content-Type", "image/png")
+		f.Response.Body = []byte{0x89, 'P', 'N', 'G'}
+		go func() { f.Finish() }()
+		dumper.Requestheaders(f)
+		time.Sleep(100 * time.Millisecond)
+		if contains(buf.String(), "PNG") {
+			t.Error("Binary body should be filtered")
+		}
+	})
+
+	t.Run("Level0", func(t *testing.T) {
+		buf.Reset()
+		dumper0 := NewDumper(&buf, 0)
+		f := createTestFlow()
+		go func() { f.Finish() }()
+		dumper0.Requestheaders(f)
+		time.Sleep(100 * time.Millisecond)
+		if contains(buf.String(), "request body") {
+			t.Error("Level 0 should not include body")
+		}
+	})
+}
+
+func TestDumper_NewWithFilename(t *testing.T) {
+	tmpFile := t.TempDir() + "/dump.log"
+	d := NewDumperWithFilename(tmpFile, 1)
+	if d == nil {
+		t.Fatal("Expected non-nil dumper")
 	}
 }
 
 func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[0:len(s)] == s &&  bytes.Contains([]byte(s), []byte(substr))
-    // simple strings.Contains
     return bytes.Contains([]byte(s), []byte(substr))
 }

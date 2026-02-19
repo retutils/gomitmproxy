@@ -100,6 +100,26 @@ func TestEnsureSNI(t *testing.T) {
 	}
 }
 
+func TestGetClientHelloID_Unknown(t *testing.T) {
+    _, ok := getClientHelloID("completely_unknown")
+    if ok {
+        t.Error("Expected ok=false for unknown fingerprint")
+    }
+}
+
+func TestNewUtlsConn_Fallback(t *testing.T) {
+    opts := &Options{TlsFingerprint: "non_existent_profile"}
+    clientHello := &tls.ClientHelloInfo{ServerName: "fallback.com"}
+    conn := &mockConn{}
+    uConn, err := NewUtlsConn(conn, opts, clientHello)
+    if err != nil {
+        t.Fatal(err)
+    }
+    if uConn == nil {
+        t.Fatal("Expected non-nil fallback uConn")
+    }
+}
+
 func TestUtlsStateToTlsState(t *testing.T) {
 	uState := utls.ConnectionState{
 		Version:            tls.VersionTLS13,

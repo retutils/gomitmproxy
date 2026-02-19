@@ -22,10 +22,18 @@ func NewStorageAddon(storageDir string) (*StorageAddon, error) {
 }
 
 func (s *StorageAddon) Response(f *proxy.Flow) {
-	// Save flow when response is received
+	// Synchronously create FlowEntry and extract PII metadata to capture current state
+	entry, err := storage.NewFlowEntry(f)
+	if err != nil {
+		log.Errorf("StorageAddon: failed to create flow entry %s: %v", f.Id, err)
+		return
+	}
+	piiData := f.Metadata["pii"]
+
+	// Save flow entry asynchronously
 	go func() {
-		if err := s.Service.Save(f); err != nil {
-			log.Errorf("StorageAddon: failed to save flow %s: %v", f.Id, err)
+		if err := s.Service.SaveEntry(entry, piiData); err != nil {
+			log.Errorf("StorageAddon: failed to save flow %s: %v", entry.ID, err)
 		}
 	}()
 }

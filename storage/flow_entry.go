@@ -2,6 +2,7 @@ package storage
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"time"
 
@@ -30,6 +31,9 @@ type FlowEntry struct {
 
 // NewFlowEntry converts a proxy.Flow to a storage-ready FlowEntry
 func NewFlowEntry(f *proxy.Flow) (*FlowEntry, error) {
+	if f == nil || f.Request == nil || f.ConnContext == nil {
+		return nil, errors.New("invalid flow: missing request or connection context")
+	}
 	reqHeaderJSON, err := json.Marshal(f.Request.Header)
 	if err != nil {
 		reqHeaderJSON = []byte("{}")

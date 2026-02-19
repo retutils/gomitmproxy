@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/tls"
@@ -173,10 +174,72 @@ func TestProxySetters(t *testing.T) {
 	p.SetAuthProxy(auth)
 }
 
+func TestProxy_GetUpstreamConn_Error(t *testing.T) {
+    opts := &Options{Addr: ":0"}
+    p, _ := NewProxy(opts)
+    
+    // Invalid host
+    req := &http.Request{URL: &url.URL{Scheme: "http", Host: "invalid-host.local"}}
+    _, err := p.getUpstreamConn(context.Background(), req)
+    if err == nil {
+        t.Error("Expected error for invalid host")
+    }
+
+    // Proxy error
+    p.Opts.Upstream = "http://localhost:1" // Invalid proxy
+    _, err = p.getUpstreamConn(context.Background(), req)
+    if err == nil {
+        t.Error("Expected error for invalid proxy")
+    }
+}
+
 func TestProxyUpstream(t *testing.T) {
     opts := &Options{Addr: ":0"}
     p, _ := NewProxy(opts)
     
     // Test realUpstreamProxy
     _ = p.realUpstreamProxy()
+}
+
+func TestProxy_StartError(t *testing.T) {
+    // Port 1 is usually restricted or unavailable, but better to use something that definitely fails
+    // or just close it.
+    opts := &Options{Addr: "127.0.0.1:1"}
+    p, _ := NewProxy(opts)
+    err := p.Start()
+    if err == nil {
+        t.Error("Expected error when starting on port 1")
+    }
+}
+
+func TestProxy_Addr(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	if p.Addr() != ":0" {
+		t.Errorf("Expected :0 Addr before Start, got %s", p.Addr())
+	}
+	go p.Start()
+	defer p.Close()
+	time.Sleep(100 * time.Millisecond)
+	if p.Addr() == ":0" || p.Addr() == "" {
+		t.Errorf("Expected dynamic Addr after Start, got %s", p.Addr())
+	}
+}
+
+func TestProxy_Certificate(t *testing.T) {
+    opts := &Options{Addr: ":0"}
+    p, _ := NewProxy(opts)
+    
+    cert := p.GetCertificate()
+    if cert.Subject.CommonName != "mitmproxy" {
+        t.Errorf("Unexpected root cert CN: %s", cert.Subject.CommonName)
+    }
+    
+    c, err := p.GetCertificateByCN("example.com")
+    if err != nil {
+        t.Error(err)
+    }
+    if c == nil {
+        t.Error("Expected cert for example.com")
+    }
 }

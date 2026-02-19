@@ -90,4 +90,26 @@ func TestInstanceLogger(t *testing.T) {
 	if !strings.Contains(string(content), "file msg") {
 		t.Error("File logger didn't write to file")
 	}
+
+    // Test WithFields
+    entry = logger.WithFields(logrus.Fields{"key": "val"})
+    if entry.Data["key"] != "val" {
+        t.Error("WithFields failed")
+    }
+
+    // Test Empty Name
+    logger2 := NewInstanceLogger(":8082", "")
+    if logger2.InstanceName != "proxy-8082" {
+        t.Errorf("Expected default name proxy-8082, got %s", logger2.InstanceName)
+    }
+
+    // Test Invalid Port in Addr
+    logger3 := NewInstanceLogger("localhost", "")
+    if logger3.Port != "localhost" {
+        t.Errorf("Expected localhost as port if no colon, got %s", logger3.Port)
+    }
+
+    // Test invalid file path for error log
+    NewInstanceLoggerWithFile(":8083", "errtest", "/invalid/path/to/log")
+    // Should log error but return logger with default entry
 }

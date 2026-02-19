@@ -5,12 +5,12 @@ import (
 	"compress/flate"
 	"compress/gzip"
 	"errors"
-	"io"
 	"strconv"
 	"strings"
 
 	"github.com/andybalholm/brotli"
 	"github.com/klauspost/compress/zstd"
+	"github.com/retutils/gomitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -92,7 +92,7 @@ func decode(enc string, body []byte) ([]byte, error) {
 			return nil, err
 		}
 		buf := bytes.NewBuffer(make([]byte, 0))
-		_, err = io.Copy(buf, dreader)
+		_, err = helper.Copy(buf, dreader)
 		if err != nil {
 			return nil, err
 		}
@@ -104,7 +104,7 @@ func decode(enc string, body []byte) ([]byte, error) {
 	} else if enc == "br" {
 		dreader := brotli.NewReader(bytes.NewReader(body))
 		buf := bytes.NewBuffer(make([]byte, 0))
-		_, err := io.Copy(buf, dreader)
+		_, err := helper.Copy(buf, dreader)
 		if err != nil {
 			return nil, err
 		}
@@ -112,7 +112,7 @@ func decode(enc string, body []byte) ([]byte, error) {
 	} else if enc == "deflate" {
 		dreader := flate.NewReader(bytes.NewReader(body))
 		buf := bytes.NewBuffer(make([]byte, 0))
-		_, err := io.Copy(buf, dreader)
+		_, err := helper.Copy(buf, dreader)
 		if err != nil {
 			return nil, err
 		}
@@ -123,7 +123,7 @@ func decode(enc string, body []byte) ([]byte, error) {
 			return nil, err
 		}
 		buf := bytes.NewBuffer(make([]byte, 0))
-		_, err = io.Copy(buf, dreader)
+		_, err = helper.Copy(buf, dreader)
 		if err != nil {
 			return nil, err
 		}

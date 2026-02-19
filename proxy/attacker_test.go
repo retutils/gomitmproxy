@@ -3,6 +3,7 @@ package proxy
 import (
 	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
 	"net/http"
@@ -95,6 +96,58 @@ func TestAttacker_Reply(t *testing.T) {
 	if rec.Header().Get("Connection") != "close" {
 		t.Errorf("Want Connection: close")
 	}
+}
+
+func TestAttacker_New_Error(t *testing.T) {
+	opts := &Options{
+		Addr: ":0",
+		NewCaFunc: func() (cert.CA, error) {
+			return nil, errors.New("ca error")
+		},
+	}
+	_, err := NewProxy(opts)
+	if err == nil {
+		t.Error("Expected error from NewProxy when ca creation fails")
+	}
+}
+
+func TestAttacker_Reply_Error(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	a := p.attacker
+	log := logrus.NewEntry(logrus.New())
+
+    // Failing response writer
+    rec := &errorResponseWriter{}
+	resp := &Response{
+		StatusCode: 200,
+		Body:       []byte("test"),
+	}
+    // Should log error but not panic
+	a.reply(rec, log, resp, nil)
+}
+
+type errorResponseWriter struct {
+    httptest.ResponseRecorder
+}
+func (e *errorResponseWriter) Write(b []byte) (int, error) {
+    return 0, errors.New("write error")
+}
+func (e *errorResponseWriter) WriteHeader(statusCode int) {}
+func (e *errorResponseWriter) Header() http.Header { return make(http.Header) }
+
+func TestAttacker_Reply_BodyReaderError(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	a := p.attacker
+	log := logrus.NewEntry(logrus.New())
+
+	rec := httptest.NewRecorder()
+	resp := &Response{
+		StatusCode: 200,
+		BodyReader: io.NopCloser(&MockReader{Err: errors.New("read error")}),
+	}
+	a.reply(rec, log, resp, nil)
 }
 
 func TestAttacker_InternalHelpers(t *testing.T) {

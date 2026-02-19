@@ -276,3 +276,25 @@ loop:
     
     webAddon.Responseheaders(f)
 }
+
+func TestWebAddon_DisconnectedClient(t *testing.T) {
+    webAddon := NewWebAddon(":0")
+    webAddon.Start()
+    defer webAddon.Close()
+    time.Sleep(50 * time.Millisecond)
+
+    // Connect and immediately close
+	u := url.URL{Scheme: "ws", Host: webAddon.Addr, Path: "/echo"}
+	c, _, _ := websocket.DefaultDialer.Dial(u.String(), nil)
+	c.Close()
+    
+    // Give time for removeConn to be called via readloop error
+    time.Sleep(100 * time.Millisecond)
+
+    // Should not panic or block
+    connCtx := &proxy.ConnContext{
+        ClientConn: &proxy.ClientConn{Conn: &dummyConn{}, Id: uuid.NewV4()},
+        FlowCount: *atomic.NewUint32(1),
+    }
+    webAddon.Requestheaders(&proxy.Flow{ConnContext: connCtx})
+}

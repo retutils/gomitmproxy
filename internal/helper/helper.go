@@ -8,7 +8,21 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"sync"
 )
+
+var BufferPool = sync.Pool{
+	New: func() interface{} {
+		return make([]byte, 32*1024)
+	},
+}
+
+// Copy copies from src to dst using a pooled buffer.
+func Copy(dst io.Writer, src io.Reader) (written int64, err error) {
+	buf := BufferPool.Get().([]byte)
+	defer BufferPool.Put(buf)
+	return io.CopyBuffer(dst, src, buf)
+}
 
 // 尝试将 Reader 读取至 buffer 中
 // 如果未达到 limit，则成功读取进入 buffer
@@ -17,7 +31,7 @@ func ReaderToBuffer(r io.Reader, limit int64) ([]byte, io.Reader, error) {
 	buf := bytes.NewBuffer(make([]byte, 0))
 	lr := io.LimitReader(r, limit)
 
-	_, err := io.Copy(buf, lr)
+	_, err := Copy(buf, lr)
 	if err != nil {
 		return nil, nil, err
 	}

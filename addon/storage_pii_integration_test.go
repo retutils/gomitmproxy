@@ -71,7 +71,7 @@ func TestStorageAddon_PII_Integration_SaveAndSearch(t *testing.T) {
 
 	// 6. Save Flow
 	ctx := context.Background()
-	err = storageAddon.Service.Save(f)
+	err = saveFlow(storageAddon, f)
 	if err != nil {
 		t.Fatalf("Failed to save flow: %v", err)
 	}

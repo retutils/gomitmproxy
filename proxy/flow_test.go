@@ -1,6 +1,7 @@
 package proxy
 
 import (
+	"bytes"
 	"encoding/json"
 	"net/http"
 	"net/url"
@@ -77,6 +78,21 @@ func TestFlow_Request_UnmarshalErrors(t *testing.T) {
 	if err == nil {
 		t.Error("Expected header value string parse error")
 	}
+
+    // Missing fields
+    err = json.Unmarshal([]byte(`{}`), &req)
+    if err == nil {
+        t.Log("Unmarshal empty json returns nil err")
+    }
+}
+
+func TestFlow_Request_Marshal_EmptyURL(t *testing.T) {
+    req := &Request{}
+    b, err := req.MarshalJSON()
+    if err != nil { t.Fatal(err) }
+    if !bytes.Contains(b, []byte(`"url":""`)) {
+        t.Errorf("Expected empty url string, got %s", string(b))
+    }
 }
 
 func TestFlow_Request_Raw(t *testing.T) {

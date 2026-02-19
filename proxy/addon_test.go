@@ -2,8 +2,10 @@ package proxy
 
 import (
 	"bytes"
-	"net/http"
+	"net/url"
 	"testing"
+
+	"go.uber.org/atomic"
 )
 
 func TestBaseAddon(t *testing.T) {
@@ -42,6 +44,7 @@ func TestLogAddon(t *testing.T) {
 	connCtx := &ConnContext{
 		ClientConn: cconn,
 		ServerConn: sconn,
+        FlowCount: *atomic.NewUint32(0),
 	}
 	
 	// ClientConnected
@@ -57,9 +60,9 @@ func TestLogAddon(t *testing.T) {
 	addon.ServerDisconnected(connCtx)
 	
 	// Requestheaders
-	req, _ := http.NewRequest("GET", "http://example.com", nil)
+	u, _ := url.Parse("http://example.com")
 	f := NewFlow()
-	f.Request = NewRequest(req)
+	f.Request = &Request{Method: "GET", URL: u}
 	f.ConnContext = connCtx
 	
 	addon.Requestheaders(f)
@@ -73,8 +76,9 @@ func TestLogAddon(t *testing.T) {
 	// Wait for async log in Requestheaders (it waits for f.Done())
 	f.Response = &Response{StatusCode: 200, Body: []byte("OK")}
 	f.Finish()
-	// Give it a moment? It's async logging, hard to verify without hooking logger.
-	// But main goal is coverage (execution).
+
+    // Response
+    addon.Response(f)
 }
 
 func TestUpstreamCertAddon(t *testing.T) {

@@ -40,16 +40,22 @@ func (r *Request) Raw() *http.Request {
 }
 
 func (req *Request) MarshalJSON() ([]byte, error) {
-	r := make(map[string]interface{})
-	r["method"] = req.Method
-	if req.URL != nil {
-		r["url"] = req.URL.String()
-	} else {
-		r["url"] = ""
+	type requestJSON struct {
+		Method string      `json:"method"`
+		URL    string      `json:"url"`
+		Proto  string      `json:"proto"`
+		Header http.Header `json:"header"`
 	}
-	r["proto"] = req.Proto
-	r["header"] = req.Header
-	return json.Marshal(r)
+	urlStr := ""
+	if req.URL != nil {
+		urlStr = req.URL.String()
+	}
+	return json.Marshal(&requestJSON{
+		Method: req.Method,
+		URL:    urlStr,
+		Proto:  req.Proto,
+		Header: req.Header,
+	})
 }
 
 func (req *Request) UnmarshalJSON(data []byte) error {
@@ -119,19 +125,19 @@ type Response struct {
 
 // flow
 type Flow struct {
-	Id          uuid.UUID
-	ConnContext *ConnContext
-	Request     *Request
-	Response    *Response
+	Id          uuid.UUID    `json:"id"`
+	ConnContext *ConnContext `json:"-"`
+	Request     *Request     `json:"request"`
+	Response    *Response    `json:"response"`
 
 	// https://docs.mitmproxy.org/stable/overview-features/#streaming
 	// 如果为 true，则不缓冲 Request.Body 和 Response.Body，且不进入之后的 Addon.Request 和 Addon.Response
-	Stream            bool
-	UseSeparateClient bool // use separate http client to send http request
-	done              chan struct{}
+	Stream            bool                   `json:"-"`
+	UseSeparateClient bool                   `json:"-"` // use separate http client to send http request
+	done              chan struct{}          `json:"-"`
 
 	// Metadata to pass data between addons. Not persisted by default unless handled by storage addon.
-	Metadata map[string]interface{}
+	Metadata map[string]interface{} `json:"-"`
 }
 
 func NewFlow() *Flow {
@@ -151,9 +157,7 @@ func (f *Flow) Finish() {
 }
 
 func (f *Flow) MarshalJSON() ([]byte, error) {
-	j := make(map[string]interface{})
-	j["id"] = f.Id
-	j["request"] = f.Request
-	j["response"] = f.Response
-	return json.Marshal(j)
+	type Alias Flow
+	return json.Marshal((*Alias)(f))
 }
+

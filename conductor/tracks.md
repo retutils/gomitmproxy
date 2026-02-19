@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: Wappalyzer Integration for Technology Detection**
+- [~] **Track: Wappalyzer Integration for Technology Detection**
   *Link: [./tracks/wappalyzer_20260219/](./tracks/wappalyzer_20260219/)*

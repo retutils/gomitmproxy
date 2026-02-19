@@ -97,8 +97,99 @@ func TestMapLocal(t *testing.T) {
         t.Error("Expected no response for no match")
     }
     
-    // Test validation
     if err := ml.validate(); err != nil {
         t.Errorf("Validation failed: %v", err)
     }
+
+    // Case 4: Disabled addon
+    ml.Enable = false
+    f4 := proxy.NewFlow()
+    f4.Request = req
+    ml.Requestheaders(f4)
+    if f4.Response != nil {
+        t.Error("Expected no response for disabled addon")
+    }
+    ml.Enable = true
+
+    // Case 5: Item disabled
+    ml.Items[0].Enable = false
+    f5 := proxy.NewFlow()
+    f5.Request = req
+    ml.Requestheaders(f5)
+    if f5.Response != nil {
+        t.Error("Expected no response for disabled item")
+    }
+    ml.Items[0].Enable = true
+
+    // Case 6: Map to non-existent file
+    ml.Items[0].To.Path = "/non/existent/file"
+    f6 := proxy.NewFlow()
+    f6.Request = req
+    ml.Requestheaders(f6)
+    if f6.Response == nil {
+        t.Fatal("Expected response even if file missing (it should set 404 or similar)")
+    }
+    if f6.Response.StatusCode != 404 {
+        t.Errorf("Expected 404 for missing file, got %d", f6.Response.StatusCode)
+    }
+
+    // Case 7: Match directory without wildcard
+    ml.Items[1].From.Path = "/bar"
+    f7 := proxy.NewFlow()
+    f7.Request = &proxy.Request{Method: "GET", URL: &url.URL{Host: "example.com", Path: "/bar/baz.txt"}}
+    ml.Requestheaders(f7)
+    if f7.Response != nil {
+        t.Error("Expected no match for directory without wildcard")
+    }
+}
+
+func TestMapLocal_Validate(t *testing.T) {
+	tests := []struct {
+		name    string
+		ml      *MapLocal
+		wantErr bool
+	}{
+		{
+			name: "Valid",
+			ml: &MapLocal{Items: []*mapLocalItem{{From: &MapFrom{}, To: &mapLocalTo{Path: "p"}}}},
+			wantErr: false,
+		},
+		{
+			name: "Missing From",
+			ml: &MapLocal{Items: []*mapLocalItem{{To: &mapLocalTo{Path: "p"}}}},
+			wantErr: true,
+		},
+		{
+			name: "Missing To",
+			ml: &MapLocal{Items: []*mapLocalItem{{From: &MapFrom{}}}},
+			wantErr: true,
+		},
+        {
+			name: "Empty To",
+			ml: &MapLocal{Items: []*mapLocalItem{{From: &MapFrom{}, To: &mapLocalTo{}}}},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.ml.validate(); (err != nil) != tt.wantErr {
+				t.Errorf("validate() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestMapLocal_NewFromFile(t *testing.T) {
+	tmpFile, _ := os.CreateTemp("", "maplocal.json")
+	defer os.Remove(tmpFile.Name())
+	tmpFile.WriteString(`{"enable": true, "items": []}`)
+	tmpFile.Close()
+
+	ml, err := NewMapLocalFromFile(tmpFile.Name())
+	if err != nil {
+		t.Fatalf("NewMapLocalFromFile failed: %v", err)
+	}
+	if !ml.Enable {
+		t.Error("Expected enabled from file")
+	}
 }

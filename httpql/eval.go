@@ -2,6 +2,7 @@ package httpql
 
 import (
 	"regexp"
+	"strconv"
 	"strings"
 
 	"github.com/retutils/gomitmproxy/proxy"
@@ -58,7 +59,25 @@ func (r *RequestClause) Eval(f *proxy.Flow) bool {
 			return false
 		}
 	}
-	// TODO: Port, TLS
+	if r.Port != nil {
+		port, _ := strconv.Atoi(f.Request.URL.Port())
+		if port == 0 {
+			if f.Request.URL.Scheme == "https" {
+				port = 443
+			} else {
+				port = 80
+			}
+		}
+		if !r.Port.Eval(port) {
+			return false
+		}
+	}
+	if r.IsTLS != nil {
+		isTls := f.Request.URL.Scheme == "https"
+		if !r.IsTLS.Eval(isTls) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -75,7 +94,12 @@ func (r *ResponseClause) Eval(f *proxy.Flow) bool {
 			return false
 		}
 	}
-	// TODO: Length
+	if r.Length != nil {
+		body, err := f.Response.DecodedBody()
+		if err == nil && !r.Length.Eval(len(body)) {
+			return false
+		}
+	}
 	return true
 }
 
@@ -93,9 +117,15 @@ func (s *StringExpr) Eval(val string) bool {
 		// simple wildcard
 		matched, _ := regexp.MatchString(ConvertLikeToRegex(s.Value), val)
 		return matched
+	case OpNLike:
+		matched, _ := regexp.MatchString(ConvertLikeToRegex(s.Value), val)
+		return !matched
 	case OpRegex:
 		matched, _ := regexp.MatchString(s.Value, val)
 		return matched
+	case OpNRegex:
+		matched, _ := regexp.MatchString(s.Value, val)
+		return !matched
 	}
 	return false
 }

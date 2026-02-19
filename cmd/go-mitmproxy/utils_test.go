@@ -57,3 +57,22 @@ func TestEntryAuth(t *testing.T) {
         t.Errorf("expected success, got err: %v", err)
     }
 }
+
+func TestNewDefaultBasicAuth_Error(t *testing.T) {
+    _, err := NewDefaultBasicAuth("invalidformat")
+    if err == nil {
+        t.Error("Expected error for invalid auth format")
+    }
+}
+
+func TestParseRequestAuth_Invalid(t *testing.T) {
+    auth := &DefaultBasicAuth{Auth: map[string]string{"user": "pass"}}
+    
+    if auth.parseRequestAuth("NotBasic foo") {
+        t.Error("Expected false for non-Basic auth")
+    }
+    
+    if auth.parseRequestAuth("Basic " + base64.StdEncoding.EncodeToString([]byte("useronly"))) {
+        t.Error("Expected false for missing colon in decoded auth")
+    }
+}

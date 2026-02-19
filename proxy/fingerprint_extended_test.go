@@ -157,6 +157,26 @@ func TestFingerprint_ListFingerprints_EdgeCases(t *testing.T) {
 	}
 }
 
+func TestFingerprint_LoadFingerprint_Error(t *testing.T) {
+    // 1. Non-existent
+    _, err := LoadFingerprint("absolutely_non_existent")
+    if err == nil {
+        t.Error("Expected error for non-existent fingerprint")
+    }
+
+    // 2. Malformed JSON
+    tmpDir := t.TempDir()
+    origDir := FingerprintDir
+    FingerprintDir = tmpDir
+    defer func() { FingerprintDir = origDir }()
+
+    os.WriteFile(filepath.Join(tmpDir, "malformed.json"), []byte("invalid json"), 0644)
+    _, err = LoadFingerprint("malformed")
+    if err == nil {
+        t.Error("Expected error for malformed JSON")
+    }
+}
+
 func TestFingerprint_FromClientHello(t *testing.T) {
 	info := &tls.ClientHelloInfo{
 		CipherSuites:     []uint16{0x1301},

@@ -2,6 +2,7 @@ package proxy
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/tls"
 	"fmt"
@@ -426,3 +427,258 @@ func TestEntry_HttpsDialLazyAttack_Coverage(t *testing.T) {
 	e.httpsDialLazyAttack(recNormal2, req, f)
 	// Should close conn and return
 }
+
+func TestEntry_HttpsDialFirstAttack_NoWrapClientConn(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := newEntry(p)
+	f := NewFlow()
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+
+	req := httptest.NewRequest("CONNECT", "http://"+ln.Addr().String(), nil)
+	req.URL.Host = ln.Addr().String()
+	req.Host = ln.Addr().String()
+
+	// Use a real TCP connection
+	clientConn, _ := net.Dial("tcp", ln.Addr().String())
+	defer clientConn.Close()
+	wc := newWrapClientConn(clientConn, p)
+	connCtx := newConnContext(wc, p)
+	wc.connCtx = connCtx
+	
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+	req = req.WithContext(ctx)
+	f.ConnContext = connCtx
+
+	// cconn is NOT *wrapClientConn
+	rec := &mockHijackRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		Conn:             &mockConn{},
+	}
+	e.httpsDialFirstAttack(rec, req, f)
+}
+
+func TestEntry_HttpsDialFirstAttack_PeekFail(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := newEntry(p)
+	f := NewFlow()
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+
+	req := httptest.NewRequest("CONNECT", "http://"+ln.Addr().String(), nil)
+	req.URL.Host = ln.Addr().String()
+	req.Host = ln.Addr().String()
+
+	serverLn, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer serverLn.Close()
+	
+	realConn, _ := net.Dial("tcp", serverLn.Addr().String())
+	// We don't defer realConn.Close() here because e.httpsDialFirstAttack will close it
+
+	wc := newWrapClientConn(realConn, p)
+	connCtx := newConnContext(wc, p)
+	wc.connCtx = connCtx
+	
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+	req = req.WithContext(ctx)
+	f.ConnContext = connCtx
+
+	// Close the connection immediately to cause Peek to fail
+	realConn.Close()
+
+	rec := &mockHijackRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		Conn:             wc,
+	}
+	e.httpsDialFirstAttack(rec, req, f)
+}
+
+func TestEntry_HttpsDialFirstAttack_NotTLS(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := newEntry(p)
+	f := NewFlow()
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	go func() {
+		c, _ := ln.Accept()
+		if c != nil {
+			c.Close()
+		}
+	}()
+
+	req := httptest.NewRequest("CONNECT", "http://"+ln.Addr().String(), nil)
+	req.URL.Host = ln.Addr().String()
+	req.Host = ln.Addr().String()
+
+	serverLn, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer serverLn.Close()
+	
+	realConn, _ := net.Dial("tcp", serverLn.Addr().String())
+	// We don't defer realConn.Close() here because e.httpsDialFirstAttack will close it
+
+	wc := newWrapClientConn(realConn, p)
+	connCtx := newConnContext(wc, p)
+	wc.connCtx = connCtx
+	
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+	req = req.WithContext(ctx)
+	f.ConnContext = connCtx
+
+	// Set up the bufio reader with some non-TLS data
+	wc.r = bufio.NewReader(bytes.NewReader([]byte("GET / HTTP/1.1\r\n")))
+
+	rec := &mockHijackRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		Conn:             wc,
+	}
+	e.httpsDialFirstAttack(rec, req, f)
+}
+
+
+func TestEntry_HttpsDialLazyAttack_IsTLS(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := newEntry(p)
+	f := NewFlow()
+
+	serverLn, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer serverLn.Close()
+	realConn, _ := net.Dial("tcp", serverLn.Addr().String())
+	// We don't defer realConn.Close() here because e.httpsDialLazyAttack will close it
+
+	wc := newWrapClientConn(realConn, p)
+	connCtx := newConnContext(wc, p)
+	wc.connCtx = connCtx
+	
+	req := httptest.NewRequest("CONNECT", "http://example.com:443", nil)
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+	req = req.WithContext(ctx)
+	f.ConnContext = connCtx
+
+	// Set up the bufio reader with TLS-like data (0x16 is Handshake)
+	wc.r = bufio.NewReader(bytes.NewReader([]byte{0x16, 0x03, 0x01}))
+
+	rec := &mockHijackRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		Conn:             wc,
+	}
+	
+	// We need to mock ca to avoid panic in GetCert
+	ca, _ := cert.NewSelfSignCA("")
+	p.attacker.ca = ca
+
+	e.httpsDialLazyAttack(rec, req, f)
+}
+
+func TestEntry_HttpsDialLazyAttack_NotTLS_Success(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := newEntry(p)
+	f := NewFlow()
+
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	go func() {
+		c, _ := ln.Accept()
+		if c != nil {
+			c.Close()
+		}
+	}()
+
+	req := httptest.NewRequest("CONNECT", "http://"+ln.Addr().String(), nil)
+	req.URL.Host = ln.Addr().String()
+	req.Host = ln.Addr().String()
+
+	serverLn, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer serverLn.Close()
+	realConn, _ := net.Dial("tcp", serverLn.Addr().String())
+
+	wc := newWrapClientConn(realConn, p)
+	connCtx := newConnContext(wc, p)
+	wc.connCtx = connCtx
+	
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+	req = req.WithContext(ctx)
+	f.ConnContext = connCtx
+
+	// Set up the bufio reader with some non-TLS data
+	wc.r = bufio.NewReader(bytes.NewReader([]byte("GET / HTTP/1.1\r\n")))
+
+	rec := &mockHijackRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		Conn:             wc,
+	}
+	e.httpsDialLazyAttack(rec, req, f)
+}
+
+func TestEntry_HttpsDialLazyAttack_NoWrapClientConn(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := newEntry(p)
+	f := NewFlow()
+
+	req := httptest.NewRequest("CONNECT", "http://example.com:443", nil)
+	
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	clientConn, _ := net.Dial("tcp", ln.Addr().String())
+	defer clientConn.Close()
+	
+	wc := newWrapClientConn(clientConn, p)
+	connCtx := newConnContext(wc, p)
+	wc.connCtx = connCtx
+	
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+	req = req.WithContext(ctx)
+	f.ConnContext = connCtx
+
+	// cconn is NOT *wrapClientConn
+	rec := &mockHijackRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		Conn:             &mockConn{},
+	}
+	e.httpsDialLazyAttack(rec, req, f)
+}
+
+func TestEntry_HttpsDialLazyAttack_NotTLS_Fail(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	e := newEntry(p)
+	f := NewFlow()
+
+	req := httptest.NewRequest("CONNECT", "http://example.com:443", nil)
+	// No host set correctly so dial fails
+	
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	clientConn, _ := net.Dial("tcp", ln.Addr().String())
+	defer clientConn.Close()
+	
+	wc := newWrapClientConn(clientConn, p)
+	connCtx := newConnContext(wc, p)
+	wc.connCtx = connCtx
+	
+	ctx := context.WithValue(req.Context(), connContextKey, connCtx)
+	req = req.WithContext(ctx)
+	f.ConnContext = connCtx
+
+	// Non-TLS data
+	wc.r = bufio.NewReader(bytes.NewReader([]byte("GET / HTTP/1.1\r\n")))
+
+	rec := &mockHijackRecorder{
+		ResponseRecorder: httptest.NewRecorder(),
+		Conn:             wc,
+	}
+	e.httpsDialLazyAttack(rec, req, f)
+}
+
+
+
+
+

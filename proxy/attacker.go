@@ -631,13 +631,13 @@ func (a *attacker) reply(res http.ResponseWriter, log *log.Entry, response *Resp
 	res.WriteHeader(response.StatusCode)
 
 	if body != nil {
-		_, err := io.Copy(res, body)
+		_, err := helper.Copy(res, body)
 		if err != nil {
 			logErr(log, err)
 		}
 	}
 	if response.BodyReader != nil {
-		_, err := io.Copy(res, response.BodyReader)
+		_, err := helper.Copy(res, response.BodyReader)
 		if err != nil {
 			logErr(log, err)
 		}

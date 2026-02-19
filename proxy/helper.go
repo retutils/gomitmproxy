@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/retutils/gomitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -46,7 +47,7 @@ func transfer(log *log.Entry, server, client io.ReadWriteCloser) {
 	errChan := make(chan error)
 	go func() {
 		// client -> server
-		_, err := io.Copy(server, client)
+		_, err := helper.Copy(server, client)
 		log.Debugln("client copy end", err)
 		// Close server write side? net.Conn usually fully closes.
 		// If server is *net.TCPConn we could CloseWrite.
@@ -67,7 +68,7 @@ func transfer(log *log.Entry, server, client io.ReadWriteCloser) {
 	}()
 	go func() {
 		// server -> client
-		_, err := io.Copy(client, server)
+		_, err := helper.Copy(client, server)
 		log.Debugln("server copy end", err)
 		
 		// If we close client, the other goroutine reading from client (if not finished) gets EOF/error.
