@@ -1,7 +1,7 @@
 # Implementation Plan: Wappalyzer Integration for Technology Detection
 
 #### Phase 1: Storage Layer Extension
-- [ ] Task: Create `host_technologies` table in DuckDB.
+- [x] Task: Create `host_technologies` table in DuckDB. [54c605f]
     - [ ] Write migration/initialization logic in `storage/service.go`.
     - [ ] Table schema: `hostname (TEXT)`, `tech_name (TEXT)`, `version (TEXT)`, `categories (TEXT)`, `last_detected (TIMESTAMP)`.
     - [ ] Add unique constraint on `(hostname, tech_name)`.
