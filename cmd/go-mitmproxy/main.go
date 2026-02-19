@@ -4,6 +4,7 @@ import (
 	"fmt"
 	rawLog "log"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 
@@ -42,6 +43,7 @@ type Config struct {
 	StorageDir      string // Directory to store captured flows (DuckDB + Bleve)
 	Search          string // Search query for stored flows
 	ScanPII         bool   // Enable PII scanning (regex + AC)
+	ScanTech        bool   // Enable technology scanning (Wappalyzer)
 }
 
 func main() {
@@ -86,10 +88,25 @@ func main() {
 			fmt.Println("No results found.")
 		} else {
 			fmt.Printf("Found %d results:\n", len(results))
+			hostTechs := make(map[string][]storage.HostTechnology)
 			for _, entry := range results {
-				fmt.Printf("[%s] %s %s (Status: %d)\n", entry.ID, entry.Method, entry.URL, entry.StatusCode)
-				// Maybe print snippets or headers if verbose?
-				// For now just ID and URL is proof of concept
+				u, _ := url.Parse(entry.URL)
+				hostname := u.Hostname()
+				if _, ok := hostTechs[hostname]; !ok {
+					techs, _ := svc.GetHostTechnologies(hostname)
+					hostTechs[hostname] = techs
+				}
+
+				techStr := ""
+				if len(hostTechs[hostname]) > 0 {
+					var names []string
+					for _, t := range hostTechs[hostname] {
+						names = append(names, t.TechName)
+					}
+					techStr = fmt.Sprintf(" [Tech: %s]", strings.Join(names, ", "))
+				}
+
+				fmt.Printf("[%s] %s %s (Status: %d)%s\n", entry.ID, entry.Method, entry.URL, entry.StatusCode, techStr)
 			}
 		}
 		os.Exit(0)
@@ -196,14 +213,21 @@ func main() {
 		log.Infoln("PII scanning enabled")
 	}
 
+	var storageSvc *storage.Service
 	if config.StorageDir != "" {
 		storageAddon, err := addon.NewStorageAddon(config.StorageDir)
 		if err != nil {
 			log.Fatalf("failed to init storage: %v", err)
 		}
 		p.AddAddon(storageAddon)
+		storageSvc = storageAddon.Service
 		defer storageAddon.Close()
 		log.Infof("Flow storage enabled in: %s", config.StorageDir)
+	}
+
+	if config.ScanTech {
+		p.AddAddon(addon.NewWappalyzerAddon(storageSvc))
+		log.Infoln("Technology scanning enabled")
 	}
 
 	log.Fatal(p.Start())
