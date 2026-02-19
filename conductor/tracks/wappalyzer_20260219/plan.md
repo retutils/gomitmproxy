@@ -10,16 +10,16 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Storage Layer Extension' (Protocol in workflow.md)
 
 #### Phase 2: Core Analysis Logic (WappalyzerAddon)
-- [ ] Task: Initialize `WappalyzerAddon` in `addon/wappalyzer.go`.
-    - [ ] Import `github.com/projectdiscovery/wappalyzergo`.
-    - [ ] Define `WappalyzerAddon` struct with Host and Pattern caches (LRU).
-- [ ] Task: Implement Content Sampling Logic.
-    - [ ] Logic to extract `<head>`, top of `<body>`, and footer from HTML responses.
-    - [ ] Implement size capping (>1MB skip) and sampling limits consistent with reference.
-- [ ] Task: Implement `Response` hook in `WappalyzerAddon`.
-    - [ ] Perform analysis in a background goroutine.
-    - [ ] Chain: Check Cache -> Fast Match (URL/Headers/Cookies) -> Sampled Body Match.
-    - [ ] On detection: Call `storage.SaveHostTechnologies`.
+- [x] Task: Initialize `WappalyzerAddon` in `addon/wappalyzer.go`. [b361017]
+    - [x] Import `github.com/projectdiscovery/wappalyzergo`.
+    - [x] Define `WappalyzerAddon` struct with Host and Pattern caches (LRU).
+- [x] Task: Implement Content Sampling Logic. [b361017]
+    - [x] Logic to extract `<head>`, top of `<body>`, and footer from HTML responses.
+    - [x] Implement size capping (>1MB skip) and sampling limits consistent with reference.
+- [x] Task: Implement `Response` hook in `WappalyzerAddon`. [b361017]
+    - [x] Perform analysis in a background goroutine.
+    - [x] Chain: Check Cache -> Fast Match (URL/Headers/Cookies) -> Sampled Body Match.
+    - [x] On detection: Call `storage.SaveHostTechnologies`.
 - [ ] Task: Validate detection logic against `wappalyzer.com` reference data (Vue.js, Nuxt.js, Cloudflare, etc.).
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Core Analysis Logic' (Protocol in workflow.md)
 
