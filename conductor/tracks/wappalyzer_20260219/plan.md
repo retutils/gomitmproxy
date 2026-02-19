@@ -9,7 +9,7 @@
     - [ ] Logic to UPSERT technology entries for a given host.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Storage Layer Extension' (Protocol in workflow.md)
 
-#### Phase 2: Core Analysis Logic (WappalyzerAddon)
+#### Phase 2: Core Analysis Logic (WappalyzerAddon) [checkpoint: a3b5f8b]
 - [x] Task: Initialize `WappalyzerAddon` in `addon/wappalyzer.go`. [b361017]
     - [x] Import `github.com/projectdiscovery/wappalyzergo`.
     - [x] Define `WappalyzerAddon` struct with Host and Pattern caches (LRU).
