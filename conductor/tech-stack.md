@@ -10,6 +10,7 @@
     *   **Database:** `marcboeker/go-duckdb` for high-performance flow persistence.
     *   **Indexing:** `blevesearch/bleve/v2` for full-text search capability.
 *   **Scanning:** `petar-dambovaliev/aho-corasick` for high-speed string matching (PII detection).
+    *   **Technology Profiling:** Custom profiling engine using Wappalyzer patterns, leveraging `github.com/projectdiscovery/wappalyzergo` for core matching logic.
 
 ## Frontend (Web UI)
 *   **Framework:** React (TypeScript)
