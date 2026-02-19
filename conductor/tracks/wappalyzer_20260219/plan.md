@@ -5,7 +5,7 @@
     - [ ] Write migration/initialization logic in `storage/service.go`.
     - [ ] Table schema: `hostname (TEXT)`, `tech_name (TEXT)`, `version (TEXT)`, `categories (TEXT)`, `last_detected (TIMESTAMP)`.
     - [ ] Add unique constraint on `(hostname, tech_name)`.
-- [ ] Task: Implement `SaveHostTechnologies` in `storage/service.go`.
+- [x] Task: Implement `SaveHostTechnologies` in `storage/service.go`. [54c605f]
     - [ ] Logic to UPSERT technology entries for a given host.
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Storage Layer Extension' (Protocol in workflow.md)
 
