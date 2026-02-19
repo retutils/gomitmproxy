@@ -1,14 +1,14 @@
 # Implementation Plan: High-Performance DNS Caching with FastDialer
 
 #### Phase 1: Core Initialization & Options
-- [ ] Task: Update `Options` struct in `proxy/proxy.go`.
+- [x] Task: Update `Options` struct in `proxy/proxy.go`. [fc9cf17]
     - [ ] Add `DnsResolvers []string` field.
     - [ ] Add `DnsRetries int` field.
-- [ ] Task: Initialize `fastdialer.Dialer` in `NewProxy`.
+- [x] Task: Initialize `fastdialer.Dialer` in `NewProxy`. [fc9cf17]
     - [ ] Import `github.com/projectdiscovery/fastdialer/pkg/fastdialer`.
     - [ ] Add `fastDialer *fastdialer.Dialer` field to `Proxy` struct.
     - [ ] Configure the dialer with options (resolvers, etc.) in `NewProxy`.
-- [ ] Task: Write tests for Dialer initialization in `proxy/proxy_test.go`.
+- [x] Task: Write tests for Dialer initialization in `proxy/proxy_test.go`. [fc9cf17]
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Initialization & Options' (Protocol in workflow.md)
 
 #### Phase 2: Dialer Integration & Logic
