@@ -20,7 +20,7 @@
     - [x] Perform analysis in a background goroutine.
     - [x] Chain: Check Cache -> Fast Match (URL/Headers/Cookies) -> Sampled Body Match.
     - [x] On detection: Call `storage.SaveHostTechnologies`.
-- [ ] Task: Validate detection logic against `wappalyzer.com` reference data (Vue.js, Nuxt.js, Cloudflare, etc.).
+- [x] Task: Validate detection logic against `wappalyzer.com` reference data (Vue.js, Nuxt.js, Cloudflare, etc.). [5f2af64]
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Core Analysis Logic' (Protocol in workflow.md)
 
 #### Phase 3: CLI & Integration
