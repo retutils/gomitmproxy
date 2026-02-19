@@ -1,0 +1,8 @@
+{
+  "track_id": "wappalyzer_20260219",
+  "type": "feature",
+  "status": "new",
+  "created_at": "2026-02-19T13:25:00Z",
+  "updated_at": "2026-02-19T13:25:00Z",
+  "description": "Integrate wappalyzergo to analyze the traffic that frameworks and technologies are used by apps"
+}
