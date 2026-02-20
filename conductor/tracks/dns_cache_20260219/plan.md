@@ -12,12 +12,12 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Initialization & Options' (Protocol in workflow.md)
 
 #### Phase 2: Dialer Integration & Logic
-- [ ] Task: Update `getUpstreamConn` in `proxy/proxy.go` to use `fastDialer`.
-    - [ ] Replace `(&net.Dialer{}).DialContext` with `p.fastDialer.Dial`.
-    - [ ] Implement the retry loop for resolution failures.
-- [ ] Task: Add integration tests for DNS caching in `proxy/dns_cache_test.go`.
-    - [ ] Write failing test: Verify that multiple calls to `getUpstreamConn` for the same host use the cache.
-    - [ ] Implement logic to satisfy the test.
+- [x] Task: Update `getUpstreamConn` in `proxy/proxy.go` to use `fastDialer`. [9e4767a]
+    - [x] Replace `(&net.Dialer{}).DialContext` with `p.fastDialer.Dial`.
+    - [x] Implement the retry loop for resolution failures.
+- [x] Task: Add integration tests for DNS caching in `proxy/dns_cache_test.go`. [9e4767a]
+    - [x] Write failing test: Verify that multiple calls to `getUpstreamConn` for the same host use the cache.
+    - [x] Implement logic to satisfy the test.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Dialer Integration & Logic' (Protocol in workflow.md)
 
 #### Phase 3: CLI Integration
