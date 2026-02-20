@@ -152,7 +152,19 @@ func (proxy *Proxy) getUpstreamConn(ctx context.Context, req *http.Request) (net
 	if proxyUrl != nil {
 		conn, err = helper.GetProxyConn(ctx, proxyUrl, address, proxy.Opts.SslInsecure)
 	} else {
-		conn, err = (&net.Dialer{}).DialContext(ctx, "tcp", address)
+		retries := proxy.Opts.DnsRetries
+		if retries <= 0 {
+			retries = 1
+		}
+		for i := 0; i < retries; i++ {
+			conn, err = proxy.fastDialer.Dial(ctx, "tcp", address)
+			if err == nil {
+				break
+			}
+			if i < retries-1 {
+				log.Debugf("DNS resolution/connection failed, retrying (%d/%d): %v", i+1, retries, err)
+			}
+		}
 	}
 	return conn, err
 }
