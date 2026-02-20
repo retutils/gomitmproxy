@@ -3,6 +3,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"os"
 
 	"github.com/retutils/gomitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
@@ -18,37 +19,49 @@ func loadConfigFromFile(filename string) (*Config, error) {
 
 func loadConfigFromCli() *Config {
 	config := new(Config)
-
-	flag.BoolVar(&config.version, "version", false, "show go-mitmproxy version")
-	flag.StringVar(&config.Addr, "addr", ":9080", "proxy listen addr")
-	flag.StringVar(&config.WebAddr, "web_addr", ":9081", "web interface listen addr")
-	flag.BoolVar(&config.SslInsecure, "ssl_insecure", false, "not verify upstream server SSL/TLS certificates.")
-	flag.Var((*arrayValue)(&config.IgnoreHosts), "ignore_hosts", "a list of ignore hosts")
-	flag.Var((*arrayValue)(&config.AllowHosts), "allow_hosts", "a list of allow hosts")
-	flag.StringVar(&config.CertPath, "cert_path", "", "path of generate cert files")
-	flag.IntVar(&config.Debug, "debug", 0, "debug mode: 1 - print debug log, 2 - show debug from")
-	flag.StringVar(&config.Dump, "dump", "", "dump filename")
-	flag.IntVar(&config.DumpLevel, "dump_level", 0, "dump level: 0 - header, 1 - header + body")
-	flag.StringVar(&config.Upstream, "upstream", "", "upstream proxy")
-	flag.BoolVar(&config.UpstreamCert, "upstream_cert", true, "connect to upstream server to look up certificate details")
-	flag.StringVar(&config.MapRemote, "map_remote", "", "map remote config filename")
-	flag.StringVar(&config.MapLocal, "map_local", "", "map local config filename")
-	flag.StringVar(&config.LogFile, "log_file", "", "log file path")
-	flag.StringVar(&config.filename, "f", "", "read config from the filename")
-
-	flag.StringVar(&config.ProxyAuth, "proxyauth", "", `enable proxy authentication. Format: "username:pass", "user1:pass1|user2:pass2","any" to accept any user/pass combination`)
-	flag.StringVar(&config.TlsFingerprint, "tls_fingerprint", "", "TLS fingerprint to emulate (chrome, firefox, ios, android, edge, 360, qq, random)")
-	flag.StringVar(&config.FingerprintSave, "fingerprint_save", "", "Save client fingerprint to file with specified name")
-	flag.BoolVar(&config.FingerprintList, "fingerprint_list", false, "List saved client fingerprints")
-	flag.BoolVar(&config.ScanPII, "scan_pii", false, "Enable PII and confidential information scanning")
-	flag.BoolVar(&config.ScanTech, "scan_tech", false, "Enable technology and framework scanning (Wappalyzer)")
-	flag.StringVar(&config.StorageDir, "storage_dir", "", "Directory to store captured flows (DuckDB + Bleve)")
-	flag.StringVar(&config.Search, "search", "", "Search query for stored flows (requires -storage_dir)")
-	flag.Var((*arrayValue)(&config.DnsResolvers), "dns_resolvers", "a list of DNS resolvers")
-	flag.IntVar(&config.DnsRetries, "dns_retries", 2, "number of DNS resolution retries")
-	flag.Parse()
-
+	fs := flag.NewFlagSet("go-mitmproxy", flag.ExitOnError)
+	defineFlags(fs, config)
+	fs.Parse(os.Args[1:])
 	return config
+}
+
+func defineFlags(fs *flag.FlagSet, config *Config) {
+	fs.BoolVar(&config.version, "version", config.version, "show go-mitmproxy version")
+	fs.StringVar(&config.Addr, "addr", config.Addr, "proxy listen addr")
+	if config.Addr == "" {
+		config.Addr = ":9080"
+	}
+	fs.StringVar(&config.WebAddr, "web_addr", config.WebAddr, "web interface listen addr")
+	if config.WebAddr == "" {
+		config.WebAddr = ":9081"
+	}
+	fs.BoolVar(&config.SslInsecure, "ssl_insecure", config.SslInsecure, "not verify upstream server SSL/TLS certificates.")
+	fs.Var((*arrayValue)(&config.IgnoreHosts), "ignore_hosts", "a list of ignore hosts")
+	fs.Var((*arrayValue)(&config.AllowHosts), "allow_hosts", "a list of allow hosts")
+	fs.StringVar(&config.CertPath, "cert_path", config.CertPath, "path of generate cert files")
+	fs.IntVar(&config.Debug, "debug", config.Debug, "debug mode: 1 - print debug log, 2 - show debug from")
+	fs.StringVar(&config.Dump, "dump", config.Dump, "dump filename")
+	fs.IntVar(&config.DumpLevel, "dump_level", config.DumpLevel, "dump level: 0 - header, 1 - header + body")
+	fs.StringVar(&config.Upstream, "upstream", config.Upstream, "upstream proxy")
+	fs.BoolVar(&config.UpstreamCert, "upstream_cert", config.UpstreamCert, "connect to upstream server to look up certificate details")
+	fs.StringVar(&config.MapRemote, "map_remote", config.MapRemote, "map remote config filename")
+	fs.StringVar(&config.MapLocal, "map_local", config.MapLocal, "map local config filename")
+	fs.StringVar(&config.LogFile, "log_file", config.LogFile, "log file path")
+	fs.StringVar(&config.filename, "f", config.filename, "read config from the filename")
+
+	fs.StringVar(&config.ProxyAuth, "proxyauth", config.ProxyAuth, `enable proxy authentication. Format: "username:pass", "user1:pass1|user2:pass2","any" to accept any user/pass combination`)
+	fs.StringVar(&config.TlsFingerprint, "tls_fingerprint", config.TlsFingerprint, "TLS fingerprint to emulate (chrome, firefox, ios, android, edge, 360, qq, random)")
+	fs.StringVar(&config.FingerprintSave, "fingerprint_save", config.FingerprintSave, "Save client fingerprint to file with specified name")
+	fs.BoolVar(&config.FingerprintList, "fingerprint_list", config.FingerprintList, "List saved client fingerprints")
+	fs.BoolVar(&config.ScanPII, "scan_pii", config.ScanPII, "Enable PII and confidential information scanning")
+	fs.BoolVar(&config.ScanTech, "scan_tech", config.ScanTech, "Enable technology and framework scanning (Wappalyzer)")
+	fs.StringVar(&config.StorageDir, "storage_dir", config.StorageDir, "Directory to store captured flows (DuckDB + Bleve)")
+	fs.StringVar(&config.Search, "search", config.Search, "Search query for stored flows (requires -storage_dir)")
+	fs.Var((*arrayValue)(&config.DnsResolvers), "dns_resolvers", "a list of DNS resolvers")
+	fs.IntVar(&config.DnsRetries, "dns_retries", config.DnsRetries, "number of DNS resolution retries")
+	if config.DnsRetries == 0 {
+		config.DnsRetries = 2
+	}
 }
 
 func mergeConfigs(fileConfig, cliConfig *Config) *Config {
@@ -124,20 +137,32 @@ func mergeConfigs(fileConfig, cliConfig *Config) *Config {
 }
 
 func loadConfig() *Config {
-	cliConfig := loadConfigFromCli()
-	if cliConfig.version {
-		return cliConfig
-	}
-	if cliConfig.filename == "" {
-		return cliConfig
+	// 1. Initial pass to find the config file
+	filename := ""
+	for i, arg := range os.Args {
+		if arg == "-f" && i+1 < len(os.Args) {
+			filename = os.Args[i+1]
+			break
+		}
 	}
 
-	fileConfig, err := loadConfigFromFile(cliConfig.filename)
-	if err != nil {
-		log.Warnf("read config from %v error %v", cliConfig.filename, err)
-		return cliConfig
+	config := new(Config)
+	if filename != "" {
+		fileConfig, err := loadConfigFromFile(filename)
+		if err != nil {
+			log.Warnf("read config from %v error %v", filename, err)
+		} else {
+			config = fileConfig
+			log.Infof("Loaded config from file %v: %+v", filename, config)
+		}
 	}
-	return mergeConfigs(fileConfig, cliConfig)
+
+	// 2. Final pass with CLI overrides
+	finalFs := flag.NewFlagSet("go-mitmproxy", flag.ExitOnError)
+	defineFlags(finalFs, config)
+	finalFs.Parse(os.Args[1:])
+
+	return config
 }
 
 // arrayValue 实现了 flag.Value 接口

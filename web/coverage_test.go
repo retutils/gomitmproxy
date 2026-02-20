@@ -69,6 +69,22 @@ func TestWebAddon_CoverageExtra(t *testing.T) {
 	webAddon.sendMessageUntil(f, messageTypeResponseBody)
 }
 
+func TestWebAddon_NoConns(t *testing.T) {
+	webAddon := NewWebAddon(":0")
+	// No conns added
+	
+	if webAddon.forEachConn(func(c *concurrentConn) {}) {
+		t.Error("Expected false for no conns")
+	}
+	
+	webAddon.sendFlowMayWait(nil, nil) // Should return early
+	webAddon.sendFlow(nil) // Should return early
+	
+	if webAddon.isIntercpt(nil, 0) {
+		t.Error("Expected false for no conns")
+	}
+}
+
 func TestWebAddon_Start_Fail(t *testing.T) {
 	// Use an invalid address or one that's already in use
 	webAddon := NewWebAddon("invalid-addr:999999")

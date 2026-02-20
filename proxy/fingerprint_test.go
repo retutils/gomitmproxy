@@ -193,3 +193,54 @@ func TestIntegration_FingerprintSaveLoad(t *testing.T) {
 		}
 	}
 }
+
+func TestListFingerprints(t *testing.T) {
+	tmpDir := t.TempDir()
+	origDir := FingerprintDir
+	FingerprintDir = tmpDir
+	defer func() { FingerprintDir = origDir }()
+
+	SaveFingerprint("fp1", &Fingerprint{Name: "fp1"})
+	SaveFingerprint("fp2", &Fingerprint{Name: "fp2"})
+	os.WriteFile(filepath.Join(tmpDir, "not_json.txt"), []byte("..."), 0644)
+
+	names, err := ListFingerprints()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(names) != 2 {
+		t.Errorf("Expected 2 fingerprints, got %d", len(names))
+	}
+}
+
+func TestSaveFingerprint_Error(t *testing.T) {
+	// 1. Permission denied
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "readonly")
+	os.Mkdir(path, 0444)
+	defer os.Chmod(path, 0755)
+	
+	err := SaveFingerprint(filepath.Join(path, "fp.json"), &Fingerprint{})
+	if err == nil {
+		t.Error("Expected error for non-writable path")
+	}
+}
+
+func TestLoadFingerprint_Error(t *testing.T) {
+	// 1. Invalid JSON
+	tmpFile, _ := os.CreateTemp("", "invalid.json")
+	defer os.Remove(tmpFile.Name())
+	tmpFile.WriteString("{invalid}")
+	tmpFile.Close()
+	
+	_, err := LoadFingerprint(tmpFile.Name())
+	if err == nil {
+		t.Error("Expected error for invalid JSON")
+	}
+
+	// 2. Non-existent in default dir
+	_, err = LoadFingerprint("completely-missing-fp")
+	if err == nil {
+		t.Error("Expected error for missing fingerprint")
+	}
+}

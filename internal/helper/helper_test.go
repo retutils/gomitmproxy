@@ -93,6 +93,22 @@ func TestNewStructFromFile(t *testing.T) {
 	}
 }
 
+func TestReaderToBuffer_Error(t *testing.T) {
+	er := &errorReader{err: io.ErrUnexpectedEOF}
+	_, _, err := ReaderToBuffer(er, 100)
+	if err == nil {
+		t.Error("Expected error from ReaderToBuffer")
+	}
+}
+
+type errorReader struct {
+	err error
+}
+
+func (e *errorReader) Read(p []byte) (n int, err error) {
+	return 0, e.err
+}
+
 func TestCanonicalAddr(t *testing.T) {
 	tests := []struct {
 		urlStr   string
@@ -153,5 +169,36 @@ func TestResponseCheck(t *testing.T) {
 	rc.Write([]byte("ok"))
 	if recorder.Body.String() != "ok" {
 		t.Errorf("Expected 'ok', got %s", recorder.Body.String())
+	}
+}
+
+func TestReaderToBuffer_Large(t *testing.T) {
+	data := make([]byte, 100)
+	r := bytes.NewReader(data)
+	buf, _, err := ReaderToBuffer(r, 50)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if buf != nil {
+		t.Error("Expected nil buffer for data exceeding max")
+	}
+}
+
+func TestMatchHostname(t *testing.T) {
+	tests := []struct {
+		pattern string
+		host    string
+		want    bool
+	}{
+		{"*", "example.com", true},
+		{"example.com", "example.com", true},
+		{"*.example.com", "foo.example.com", true},
+		{"*.example.com", "example.com", true}, // matchHostname("example.com", "*.example.com") -> hostname == h[2:] -> true
+		{"foo.com", "bar.com", false},
+	}
+	for _, tt := range tests {
+		if got := matchHostname(tt.host, tt.pattern); got != tt.want {
+			t.Errorf("matchHostname(%q, %q) = %v, want %v", tt.host, tt.pattern, got, tt.want)
+		}
 	}
 }

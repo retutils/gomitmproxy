@@ -17,44 +17,49 @@ import (
 )
 
 type Config struct {
-	version bool // show go-mitmproxy version
+	version bool `json:"version"` // show go-mitmproxy version
 
-	Addr         string   // proxy listen addr
-	WebAddr      string   // web interface listen addr
-	SslInsecure  bool     // not verify upstream server SSL/TLS certificates.
-	IgnoreHosts  []string // a list of ignore hosts
-	AllowHosts   []string // a list of allow hosts
-	CertPath     string   // path of generate cert files
-	Debug        int      // debug mode: 1 - print debug log, 2 - show debug from
-	Dump         string   // dump filename
-	DumpLevel    int      // dump level: 0 - header, 1 - header + body
-	Upstream     string   // upstream proxy
-	UpstreamCert bool     // Connect to upstream server to look up certificate details. Default: True
-	MapRemote    string   // map remote config filename
-	MapLocal     string   // map local config filename
-	LogFile      string   // log file path
+	Addr         string   `json:"addr"`          // proxy listen addr
+	WebAddr      string   `json:"web_addr"`      // web interface listen addr
+	SslInsecure  bool     `json:"ssl_insecure"`  // not verify upstream server SSL/TLS certificates.
+	IgnoreHosts  []string `json:"ignore_hosts"`  // a list of ignore hosts
+	AllowHosts   []string `json:"allow_hosts"`   // a list of allow hosts
+	CertPath     string   `json:"cert_path"`     // path of generate cert files
+	Debug        int      `json:"debug"`         // debug mode: 1 - print debug log, 2 - show debug from
+	Dump         string   `json:"dump"`          // dump filename
+	DumpLevel    int      `json:"dump_level"`    // dump level: 0 - header, 1 - header + body
+	Upstream     string   `json:"upstream"`      // upstream proxy
+	UpstreamCert bool     `json:"upstream_cert"` // Connect to upstream server to look up certificate details. Default: True
+	MapRemote    string   `json:"map_remote"`    // map remote config filename
+	MapLocal     string   `json:"map_local"`     // map local config filename
+	LogFile      string   `json:"log_file"`      // log file path
 
-	filename string // read config from the filename
+	filename string `json:"-"` // read config from the filename
 
-	ProxyAuth       string // Require proxy authentication
-	TlsFingerprint  string // TLS fingerprint to emulate (chrome, firefox, ios, or random)
-	FingerprintSave string // Save decoding client hello to file
-	FingerprintList bool   // List saved fingerprints
-	StorageDir      string // Directory to store captured flows (DuckDB + Bleve)
-	Search          string // Search query for stored flows
-	ScanPII         bool   // Enable PII scanning (regex + AC)
-	ScanTech        bool   // Enable technology scanning (Wappalyzer)
-	DnsResolvers    []string
-	DnsRetries      int
+	ProxyAuth       string   `json:"proxyauth"`        // Require proxy authentication
+	TlsFingerprint  string   `json:"tls_fingerprint"`  // TLS fingerprint to emulate (chrome, firefox, ios, or random)
+	FingerprintSave string   `json:"fingerprint_save"` // Save decoding client hello to file
+	FingerprintList bool     `json:"fingerprint_list"` // List saved fingerprints
+	StorageDir      string   `json:"storage_dir"`      // Directory to store captured flows (DuckDB + Bleve)
+	Search          string   `json:"search"`           // Search query for stored flows
+	ScanPII         bool     `json:"scan_pii"`         // Enable PII scanning (regex + AC)
+	ScanTech        bool     `json:"scan_tech"`        // Enable technology scanning (Wappalyzer)
+	DnsResolvers    []string `json:"dns_resolvers"`
+	DnsRetries      int      `json:"dns_retries"`
 }
 
 func main() {
 	config := loadConfig()
+	if err := Run(config); err != nil {
+		log.Fatal(err)
+	}
+}
 
+func Run(config *Config) error {
 	if config.FingerprintList {
 		names, err := proxy.ListFingerprints()
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		if len(names) == 0 {
 			fmt.Println("No saved fingerprints found.")
@@ -64,26 +69,25 @@ func main() {
 				fmt.Printf(" - %s\n", name)
 			}
 		}
-		os.Exit(0)
+		return nil
 	}
 
 	if config.Search != "" {
 		if config.StorageDir == "" {
-			fmt.Println("-storage_dir is required for search")
-			os.Exit(1)
+			return fmt.Errorf("-storage_dir is required for search")
 		}
 
 		// Initialize service in read-only mode if possible, but NewService opens both
 		// For CLI search, we just need to init, search, print, exit
 		svc, err := storage.NewService(config.StorageDir)
 		if err != nil {
-			log.Fatalf("Failed to open storage: %v", err)
+			return fmt.Errorf("failed to open storage: %w", err)
 		}
 		defer svc.Close()
 
 		results, err := svc.Search(config.Search)
 		if err != nil {
-			log.Fatalf("Search failed: %v", err)
+			return fmt.Errorf("search failed: %w", err)
 		}
 
 		if len(results) == 0 {
@@ -111,7 +115,7 @@ func main() {
 				fmt.Printf("[%s] %s %s (Status: %d)%s\n", entry.ID, entry.Method, entry.URL, entry.StatusCode, techStr)
 			}
 		}
-		os.Exit(0)
+		return nil
 	}
 
 	if config.Debug > 0 {
@@ -144,12 +148,12 @@ func main() {
 
 	p, err := proxy.NewProxy(opts)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	if config.version {
 		fmt.Println("go-mitmproxy: " + p.Version)
-		os.Exit(0)
+		return nil
 	}
 
 	log.Infof("go-mitmproxy version %v\n", p.Version)
@@ -174,7 +178,7 @@ func main() {
 		log.Infoln("Enable entry authentication")
 		auth, err := NewDefaultBasicAuth(config.ProxyAuth)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		p.SetAuthProxy(auth.EntryAuth)
 	}
@@ -221,7 +225,7 @@ func main() {
 	if config.StorageDir != "" {
 		storageAddon, err := addon.NewStorageAddon(config.StorageDir)
 		if err != nil {
-			log.Fatalf("failed to init storage: %v", err)
+			return fmt.Errorf("failed to init storage: %w", err)
 		}
 		p.AddAddon(storageAddon)
 		storageSvc = storageAddon.Service
@@ -234,5 +238,5 @@ func main() {
 		log.Infoln("Technology scanning enabled")
 	}
 
-	log.Fatal(p.Start())
+	return p.Start()
 }

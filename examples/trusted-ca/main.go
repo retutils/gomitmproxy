@@ -9,6 +9,12 @@ import (
 )
 
 func main() {
+	if err := Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func Run() error {
 	opts := &proxy.Options{
 		Addr:              ":8081",
 		StreamLargeBodies: 1024 * 1024 * 5,
@@ -16,7 +22,7 @@ func main() {
 	}
 	p, err := proxy.NewProxy(opts)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	p.SetShouldInterceptRule(func(req *http.Request) bool {
 		host, _, err2 := net.SplitHostPort(req.URL.Host)
@@ -26,7 +32,7 @@ func main() {
 		return host == "your-domain.xx.com" || host == "your-domain2.xx.com" // filter your-domain
 	})
 	p.AddAddon(&YourAddOn{})
-	log.Fatal(p.Start())
+	return p.Start()
 }
 
 type YourAddOn struct {

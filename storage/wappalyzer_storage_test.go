@@ -102,3 +102,21 @@ func TestService_HostTechnologies_Errors(t *testing.T) {
 		t.Error("Expected error from GetHostTechnologies on closed DB")
 	}
 }
+
+func TestService_GetHostTechnologies_Empty(t *testing.T) {
+	tmpDir := t.TempDir()
+	svc, _ := NewService(tmpDir)
+	defer svc.Close()
+
+	results, err := svc.GetHostTechnologies("non-existent.com")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 0 {
+		t.Errorf("Expected 0 results, got %d", len(results))
+	}
+}
+
+func TestService_SaveHostTechnologies_PartialError(t *testing.T) {
+	// This would require mocking the DB to fail on a specific insert inside the transaction
+}

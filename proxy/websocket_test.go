@@ -163,7 +163,36 @@ func TestWebSocket_Integration(t *testing.T) {
 	}
 }
 
-// Preserve existing unit/mock tests if useful, but Integration test covers most ground.
-// The original mockHijack struct was causing issues because it was undefined.
-// We can define it here if we want to keep unit tests, or just rely on integration test.
-// Let's rely on Integration test and remove the brittle unit tests that depend on unexported types.
+func TestWebSocket_DialFail(t *testing.T) {
+	ws := &webSocket{}
+	rec := httptest.NewRecorder()
+	u, _ := url.Parse("http://invalid-host.local")
+	req := httptest.NewRequest("GET", u.String(), nil)
+	req.Host = u.Host
+	ctx := context.WithValue(req.Context(), connContextKey, &ConnContext{ClientConn: &ClientConn{}})
+	req = req.WithContext(ctx)
+	
+	ws.wss(rec, req, nil, nil)
+	if rec.Code != 502 {
+		t.Errorf("Expected 502, got %d", rec.Code)
+	}
+}
+
+func TestWebSocket_UpgradeFail(t *testing.T) {
+	// Mock server that returns a 200 but NOT a switching protocol
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+
+	ws := &webSocket{}
+	rec := httptest.NewRecorder()
+	u, _ := url.Parse(backend.URL)
+	req := httptest.NewRequest("GET", u.String(), nil)
+	req.Host = u.Host
+	ctx := context.WithValue(req.Context(), connContextKey, &ConnContext{ClientConn: &ClientConn{}})
+	req = req.WithContext(ctx)
+	
+	ws.wss(rec, req, nil, nil)
+	// It should fail dial because it's not a websocket server
+}

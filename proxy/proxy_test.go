@@ -313,15 +313,15 @@ func TestProxy_NewProxy_Error(t *testing.T) {
 	}
 }
 
-func TestProxy_FastDialerInit(t *testing.T) {
+func TestProxy_GetUpstreamConn_ProxyUrlError(t *testing.T) {
 	opts := &Options{
-		Addr: ":0",
+		Addr:     ":0",
+		Upstream: " : invalid-url", // Leading space makes it invalid for url.Parse
 	}
-	p, err := NewProxy(opts)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if p.fastDialer == nil {
-		t.Error("Expected fastDialer to be initialized")
+	p, _ := NewProxy(opts)
+	req := &http.Request{Host: "example.com", URL: &url.URL{Host: "example.com"}}
+	_, err := p.getUpstreamConn(context.Background(), req)
+	if err == nil {
+		t.Error("Expected error for invalid upstream proxy URL")
 	}
 }

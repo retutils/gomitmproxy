@@ -19,12 +19,20 @@ type Config struct {
 
 func loadConfig() *Config {
 	config := new(Config)
-	flag.StringVar(&config.commonName, "commonName", "", "server commonName")
-	flag.Parse()
+	fs := flag.NewFlagSet("dummycert", flag.ExitOnError)
+	fs.StringVar(&config.commonName, "commonName", "", "server commonName")
+	fs.Parse(os.Args[1:])
 	return config
 }
 
 func main() {
+	config := loadConfig()
+	if err := Run(config); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func Run(config *Config) error {
 	log.SetLevel(log.InfoLevel)
 	log.SetReportCaller(false)
 	log.SetOutput(os.Stdout)
@@ -32,35 +40,35 @@ func main() {
 		FullTimestamp: true,
 	})
 
-	config := loadConfig()
 	if config.commonName == "" {
-		log.Fatal("commonName required")
+		return fmt.Errorf("commonName required")
 	}
 
 	caApi, err := cert.NewSelfSignCA("")
 	if err != nil {
-		panic(err)
+		return err
 	}
 	ca := caApi.(*cert.SelfSignCA)
 
-	cert, err := ca.DummyCert(config.commonName)
+	certObj, err := ca.DummyCert(config.commonName)
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	os.Stdout.WriteString(fmt.Sprintf("%v-cert.pem\n", config.commonName))
-	err = pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE", Bytes: cert.Certificate[0]})
+	err = pem.Encode(os.Stdout, &pem.Block{Type: "CERTIFICATE", Bytes: certObj.Certificate[0]})
 	if err != nil {
-		panic(err)
+		return err
 	}
 	os.Stdout.WriteString(fmt.Sprintf("\n%v-key.pem\n", config.commonName))
 
 	keyBytes, err := x509.MarshalPKCS8PrivateKey(&ca.PrivateKey)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	err = pem.Encode(os.Stdout, &pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes})
 	if err != nil {
-		panic(err)
+		return err
 	}
+	return nil
 }

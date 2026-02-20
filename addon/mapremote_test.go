@@ -119,6 +119,11 @@ func TestMapRemote_Validate(t *testing.T) {
 			mr: &MapRemote{Items: []*mapRemoteItem{{From: &MapFrom{}, To: &mapRemoteTo{}}}},
 			wantErr: true,
 		},
+		{
+			name: "Invalid Protocol",
+			mr: &MapRemote{Items: []*mapRemoteItem{{From: &MapFrom{}, To: &mapRemoteTo{Protocol: "ftp"}}}},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

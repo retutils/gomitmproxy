@@ -2,8 +2,6 @@ package cert
 
 import (
 	"bytes"
-    "crypto/ecdsa"
-    "crypto/elliptic"
 	"crypto/rand"
 	"crypto/rsa"
 	"crypto/x509"
@@ -214,9 +212,16 @@ func TestLoad_PKCS1Fallback(t *testing.T) {
 	}
 }
 
-func TestLoad_UnknownPKCS8Type(t *testing.T) {
-    // This is hard to trigger without a non-RSA key that PKCS8 supports (like ECDSA)
-    // but the code explicitly checks for *rsa.PrivateKey.
+func TestNewSelfSignCA_Error(t *testing.T) {
+	// Create a file where we want to create a directory
+	tmpFile, _ := os.CreateTemp("", "blocked")
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+	
+	_, err := NewSelfSignCA(filepath.Join(tmpFile.Name(), "subdir"))
+	if err == nil {
+		t.Error("Expected error for MkdirAll failure in NewSelfSignCA")
+	}
 }
 
 type errorWriter struct{}
@@ -246,23 +251,40 @@ func TestGetStorePath_NoHome(t *testing.T) {
     }
 }
 
-func TestLoad_NonRSAKey(t *testing.T) {
+func TestLoad_InvalidCert(t *testing.T) {
 	tmpDir := t.TempDir()
 	caAPI, _ := NewSelfSignCA(tmpDir)
 	ca := caAPI.(*SelfSignCA)
 
-    // Generate an ECDSA key instead of RSA
-    priv, _ := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-    keyBytes, _ := x509.MarshalPKCS8PrivateKey(priv)
-    
+	key, _ := rsa.GenerateKey(rand.Reader, 2048)
+	keyBytes, _ := x509.MarshalPKCS8PrivateKey(key)
+	
 	f, _ := os.Create(ca.caFile())
 	pem.Encode(f, &pem.Block{Type: "PRIVATE KEY", Bytes: keyBytes})
+	pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: []byte("invalid cert")})
+	f.Close()
+
+	err := ca.load()
+	if err == nil {
+		t.Error("Expected error for invalid certificate parsing")
+	}
+}
+
+func TestLoad_PKCS1Error(t *testing.T) {
+	tmpDir := t.TempDir()
+	caAPI, _ := NewSelfSignCA(tmpDir)
+	ca := caAPI.(*SelfSignCA)
+
+	// Create a file that looks like PKCS1 but is invalid
+	f, _ := os.Create(ca.caFile())
+	// x509.ParsePKCS8PrivateKey will fail with "use ParsePKCS1PrivateKey instead" if type is RSA PRIVATE KEY
+	pem.Encode(f, &pem.Block{Type: "RSA PRIVATE KEY", Bytes: []byte("invalid")})
 	pem.Encode(f, &pem.Block{Type: "CERTIFICATE", Bytes: ca.RootCert.Raw})
 	f.Close()
 
 	err := ca.load()
 	if err == nil {
-		t.Error("Expected error for non-RSA key")
+		t.Error("Expected error for invalid PKCS1 key")
 	}
 }
 
@@ -304,5 +326,18 @@ func TestSaveErrors(t *testing.T) {
 	err = ca.saveCert()
 	if err == nil {
 		t.Error("Expected error when saving cert to read-only directory")
+	}
+}
+
+func TestGetStorePath_MkdirError(t *testing.T) {
+	// Create a file where we want to create a directory
+	tmpFile, _ := os.CreateTemp("", "blocked")
+	defer os.Remove(tmpFile.Name())
+	tmpFile.Close()
+	
+	// Trying to create a subdir of a file should fail
+	_, err := getStorePath(filepath.Join(tmpFile.Name(), "subdir"))
+	if err == nil {
+		t.Error("Expected error for MkdirAll failure")
 	}
 }

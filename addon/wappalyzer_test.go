@@ -79,7 +79,6 @@ func TestWappalyzerAddon_Response_Filtering(t *testing.T) {
 				Response: tt.response,
 			}
 			addon.Response(f)
-			// Ensure no panic and no background processing started (hard to verify perfectly, but no panic is key)
 		})
 	}
 }
@@ -152,9 +151,36 @@ func TestWappalyzerAddon_Detection_Async(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	
-	// We expect at least Nginx or Express to be detected
 	if len(techs) == 0 {
-		t.Log("Warning: No technologies detected in async test, might be due to wappalyzergo patterns")
+		t.Log("Warning: No technologies detected in async test")
 	}
+}
+
+func TestWappalyzerAddon_AnalyzeFlow_Errors(t *testing.T) {
+	tmpDir := t.TempDir()
+	svc, _ := storage.NewService(tmpDir)
+	addon := NewWappalyzerAddon(svc)
+
+	u, _ := url.Parse("http://error-flow.com")
+	
+	// 1. DecodedBody error
+	f := &proxy.Flow{
+		Request: &proxy.Request{URL: u},
+		Response: &proxy.Response{
+			Header: http.Header{"Content-Encoding": []string{"gzip"}},
+			Body:   []byte("not-gzip"),
+		},
+	}
+	addon.analyzeFlow(f)
+
+	// 2. SaveHostTechnologies error
+	f2 := &proxy.Flow{
+		Request: &proxy.Request{URL: u},
+		Response: &proxy.Response{
+			Header: http.Header{"Server": []string{"nginx"}},
+			Body:   []byte("<html></html>"),
+		},
+	}
+	svc.Close()
+	addon.analyzeFlow(f2)
 }

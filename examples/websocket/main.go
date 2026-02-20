@@ -26,6 +26,12 @@ func (a *WebSocketMonitor) WebsocketMessage(f *proxy.Flow, msg *proxy.WebSocketM
 }
 
 func main() {
+	if err := Run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func Run() error {
 	opts := &proxy.Options{
 		Addr:              ":9080",
 		StreamLargeBodies: 1024 * 1024 * 5,
@@ -34,10 +40,10 @@ func main() {
 
 	p, err := proxy.NewProxy(opts)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	p.AddAddon(&WebSocketMonitor{})
 
-	log.Fatal(p.Start())
+	return p.Start()
 }

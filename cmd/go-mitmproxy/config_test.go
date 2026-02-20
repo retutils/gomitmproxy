@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"flag"
 	"os"
 	"path/filepath"
 	"testing"
@@ -111,23 +112,46 @@ func TestMergeConfigs_Dns(t *testing.T) {
     if merged.DnsRetries != 5 { t.Error("DnsRetries") }
 }
 
-func TestLoadConfig_Basic(t *testing.T) {
-    // This is hard to test because it uses global flag set
-    // But we can test the file loading part
-    tmpDir := t.TempDir()
-    path := filepath.Join(tmpDir, "config.json")
-    cfg := &Config{Addr: ":1234"}
-    data, _ := json.Marshal(cfg)
-    os.WriteFile(path, data, 0644)
+func TestLoadConfigFromCli(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	os.Args = []string{"cmd", "-addr", ":1111"}
+	config := loadConfigFromCli()
+	if config.Addr != ":1111" {
+		t.Errorf("Expected addr :1111, got %s", config.Addr)
+	}
+}
 
-    cliCfg := &Config{filename: path}
-    // We can't easily call loadConfig() as it calls loadConfigFromCli() which uses global flags
-    // But we can test mergeConfigs with result of loadConfigFromFile
-    fileCfg, _ := loadConfigFromFile(path)
-    merged := mergeConfigs(fileCfg, cliCfg)
-    if merged.Addr != ":1234" {
-        t.Errorf("Expected addr :1234, got %s", merged.Addr)
-    }
+func TestLoadConfig_Version(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	os.Args = []string{"cmd", "-version"}
+	config := loadConfig()
+	if !config.version {
+		t.Error("Expected version true")
+	}
+}
+
+func TestLoadConfig_File(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "cfg.json")
+	// Use a field that doesn't have a conflicting non-empty default if possible, 
+	// or just accept that Addr will be overridden by CLI default.
+	os.WriteFile(path, []byte(`{"cert_path": "/tmp/certs"}`), 0644)
+	
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	os.Args = []string{"cmd", "-f", path, "-debug", "1"}
+	config := loadConfig()
+	if config.CertPath != "/tmp/certs" {
+		t.Errorf("Expected CertPath /tmp/certs from file, got %s", config.CertPath)
+	}
+	if config.Debug != 1 {
+		t.Error("Expected debug 1 from CLI override")
+	}
 }
 
 func TestLoadConfig_Error(t *testing.T) {
@@ -135,4 +159,52 @@ func TestLoadConfig_Error(t *testing.T) {
     if err == nil {
         t.Error("Expected error for missing file")
     }
+}
+
+func TestDefineFlags(t *testing.T) {
+	config := new(Config)
+	fs := flag.NewFlagSet("test", flag.ContinueOnError)
+	defineFlags(fs, config)
+
+	args := []string{
+		"-addr", ":1234",
+		"-web_addr", ":5678",
+		"-ssl_insecure",
+		"-ignore_hosts", "example.com",
+		"-ignore_hosts", "test.com",
+		"-debug", "1",
+		"-scan_pii",
+		"-scan_tech",
+		"-dns_retries", "5",
+	}
+
+	err := fs.Parse(args)
+	if err != nil {
+		t.Fatalf("Parse failed: %v", err)
+	}
+
+	if config.Addr != ":1234" {
+		t.Errorf("Addr mismatch: %s", config.Addr)
+	}
+	if config.WebAddr != ":5678" {
+		t.Errorf("WebAddr mismatch: %s", config.WebAddr)
+	}
+	if !config.SslInsecure {
+		t.Error("SslInsecure should be true")
+	}
+	if len(config.IgnoreHosts) != 2 || config.IgnoreHosts[0] != "example.com" {
+		t.Errorf("IgnoreHosts mismatch: %v", config.IgnoreHosts)
+	}
+	if config.Debug != 1 {
+		t.Errorf("Debug mismatch: %d", config.Debug)
+	}
+	if !config.ScanPII {
+		t.Error("ScanPII should be true")
+	}
+	if !config.ScanTech {
+		t.Error("ScanTech should be true")
+	}
+	if config.DnsRetries != 5 {
+		t.Errorf("DnsRetries mismatch: %d", config.DnsRetries)
+	}
 }

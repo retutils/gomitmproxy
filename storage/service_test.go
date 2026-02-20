@@ -152,10 +152,6 @@ func TestFlowEntry_Conversion(t *testing.T) {
 	if pFlow.Id != flowID {
 		t.Errorf("Restored ID mismatch")
 	}
-	
-	// Check headers restored
-	// Note: ToProxyFlow currently reconstructs headers but doesn't attach them to a fully functional Request object in the current partial implementation
-	// We just check if it runs without error for now as per current implementation
 }
 
 func TestFlowEntry_ToProxyFlow_Error(t *testing.T) {
@@ -202,10 +198,16 @@ func TestFlowEntry_NewFlowEntry_PIIBool(t *testing.T) {
     if !entry.HasPII {
         t.Error("Expected HasPII true")
     }
+
+    // Non-bool PII
+    f.Metadata["pii"] = "yes"
+    entry2, _ := NewFlowEntry(f)
+    if entry2.HasPII {
+        t.Error("Expected HasPII false for non-bool metadata")
+    }
 }
 
 func TestService_Save_Error(t *testing.T) {
-	// Test handling of invalid flow (e.g. nil response if logic allows, or just verify Save handles errors)
 	tmpDir := t.TempDir()
 	svc, _ := NewService(tmpDir)
 	defer svc.Close()
@@ -253,19 +255,39 @@ func TestService_Search_MissingFromDB(t *testing.T) {
     }
 }
 
-func TestService_Close_Nil(t *testing.T) {
-    s := &Service{}
-    if err := s.Close(); err != nil {
-        t.Errorf("Expected nil error for empty service close, got %v", err)
+func TestService_SaveEntry_EdgeCases(t *testing.T) {
+    tmpDir := t.TempDir()
+    svc, _ := NewService(tmpDir)
+    defer svc.Close()
+
+    // 1. Invalid URL in entry
+    entry := &FlowEntry{
+        ID: uuid.NewV4().String(),
+        URL: ":invalid-url",
+        RequestHeader: "{}",
+        ResponseHeader: "{}",
+    }
+    err := svc.SaveEntry(entry, nil)
+    if err != nil {
+        t.Errorf("Expected nil error for invalid URL (should handle gracefully), got %v", err)
+    }
+
+    // 2. Invalid JSON in headers - DuckDB should return error since columns are JSON type
+    entry2 := &FlowEntry{
+        ID: uuid.NewV4().String(),
+        URL: "http://example.com",
+        RequestHeader: "{invalid}",
+        ResponseHeader: "{invalid}",
+    }
+    err = svc.SaveEntry(entry2, nil)
+    if err == nil {
+        t.Error("Expected error for invalid JSON in DuckDB JSON column")
     }
 }
 
 func TestService_Search_Error(t *testing.T) {
     tmpDir := t.TempDir()
     svc, _ := NewService(tmpDir)
-    // defer svc.Close() - don't defer because we close manually to trigger error
-
-    // Search on closed index
     svc.Close()
     _, err := svc.Search("foo")
     if err == nil {
@@ -273,8 +295,44 @@ func TestService_Search_Error(t *testing.T) {
     }
 }
 
+func TestService_Search_Fallback(t *testing.T) {
+	tmpDir := t.TempDir()
+	svc, _ := NewService(tmpDir)
+	defer svc.Close()
+
+	// 1. Invalid HTTPQL should fallback to standard Bleve query
+	_, err := svc.Search("plain-keyword")
+	if err != nil {
+		t.Errorf("Search should not fail on invalid HTTPQL (fallback expected): %v", err)
+	}
+}
+
+func TestService_Search_NoHeaders(t *testing.T) {
+    tmpDir := t.TempDir()
+    svc, _ := NewService(tmpDir)
+    defer svc.Close()
+
+    flow := &proxy.Flow{
+        Id: uuid.NewV4(),
+        Request: &proxy.Request{Method: "GET", URL: &url.URL{Host: "noheaders.com"}},
+        ConnContext: &proxy.ConnContext{ClientConn: &proxy.ClientConn{}},
+    }
+    entry, _ := NewFlowEntry(flow)
+    svc.SaveEntry(entry, nil)
+
+    results, err := svc.Search("noheaders.com")
+    if err != nil { t.Fatal(err) }
+    if len(results) == 0 { t.Fatal("Expected result") }
+}
+
+func TestService_Close_Nil(t *testing.T) {
+    s := &Service{}
+    if err := s.Close(); err != nil {
+        t.Errorf("Expected nil error for empty service close, got %v", err)
+    }
+}
+
 func TestNewService_Error(t *testing.T) {
-    // 1. Invalid path (file instead of dir)
     tmpFile, _ := os.CreateTemp("", "blocked")
     defer os.Remove(tmpFile.Name())
     tmpFile.Close()
@@ -283,6 +341,4 @@ func TestNewService_Error(t *testing.T) {
     if err == nil {
         t.Error("Expected error for invalid storage path")
     }
-
-    // 2. Schema init error (hard to trigger without mocking DB)
 }

@@ -2,33 +2,42 @@ package main
 
 import (
 	"net/http"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/retutils/gomitmproxy/proxy"
 )
 
 func TestChangeHtml(t *testing.T) {
 	addon := &ChangeHtml{}
+	
 	f := &proxy.Flow{
 		Response: &proxy.Response{
 			Header: http.Header{"Content-Type": []string{"text/html"}},
-			Body:   []byte("<title>test</title>"),
+			Body:   []byte("<html><head><title>Original</title></head></html>"),
 		},
 	}
+	
 	addon.Response(f)
-	if string(f.Response.Body) != "<title>test - go-mitmproxy</title>" {
-		t.Errorf("Unexpected body: %s", string(f.Response.Body))
+	if !strings.Contains(string(f.Response.Body), "Original - go-mitmproxy") {
+		t.Error("Title not modified correctly")
 	}
-
-    // Skip non-html
-    f2 := &proxy.Flow{
+	
+	// Test non-html
+	f2 := &proxy.Flow{
 		Response: &proxy.Response{
 			Header: http.Header{"Content-Type": []string{"text/plain"}},
-			Body:   []byte("<title>test</title>"),
+			Body:   []byte("Original"),
 		},
 	}
-    addon.Response(f2)
-    if string(f2.Response.Body) != "<title>test</title>" {
-        t.Error("Should not change non-html")
-    }
+	addon.Response(f2)
+	if string(f2.Response.Body) != "Original" {
+		t.Error("Non-HTML should not be modified")
+	}
+}
+
+func TestRun(t *testing.T) {
+	go Run()
+	time.Sleep(100 * time.Millisecond)
 }

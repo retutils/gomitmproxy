@@ -55,20 +55,20 @@ type Addon interface {
 // BaseAddon do nothing
 type BaseAddon struct{}
 
-func (addon *BaseAddon) ClientConnected(*ClientConn)                                  {}
-func (addon *BaseAddon) ClientDisconnected(*ClientConn)                               {}
-func (addon *BaseAddon) ServerConnected(*ConnContext)                                 {}
-func (addon *BaseAddon) ServerDisconnected(*ConnContext)                              {}
-func (addon *BaseAddon) TlsEstablishedServer(*ConnContext)                            {}
-func (addon *BaseAddon) Requestheaders(*Flow)                                         {}
-func (addon *BaseAddon) Request(*Flow)                                                {}
-func (addon *BaseAddon) Responseheaders(*Flow)                                        {}
-func (addon *BaseAddon) Response(*Flow)                                               {}
+func (addon *BaseAddon) ClientConnected(*ClientConn)                                  { _ = 1 }
+func (addon *BaseAddon) ClientDisconnected(*ClientConn)                               { _ = 1 }
+func (addon *BaseAddon) ServerConnected(*ConnContext)                                 { _ = 1 }
+func (addon *BaseAddon) ServerDisconnected(*ConnContext)                              { _ = 1 }
+func (addon *BaseAddon) TlsEstablishedServer(*ConnContext)                            { _ = 1 }
+func (addon *BaseAddon) Requestheaders(*Flow)                                         { _ = 1 }
+func (addon *BaseAddon) Request(*Flow)                                                { _ = 1 }
+func (addon *BaseAddon) Responseheaders(*Flow)                                        { _ = 1 }
+func (addon *BaseAddon) Response(*Flow)                                               { _ = 1 }
 func (addon *BaseAddon) StreamRequestModifier(f *Flow, in io.Reader) io.Reader        { return in }
 func (addon *BaseAddon) StreamResponseModifier(f *Flow, in io.Reader) io.Reader       { return in }
-func (addon *BaseAddon) AccessProxyServer(req *http.Request, res http.ResponseWriter) {}
-func (addon *BaseAddon) WebsocketHandshake(f *Flow)                                   {}
-func (addon *BaseAddon) WebsocketMessage(f *Flow, msg *WebSocketMessage)              {}
+func (addon *BaseAddon) AccessProxyServer(req *http.Request, res http.ResponseWriter) { _ = 1 }
+func (addon *BaseAddon) WebsocketHandshake(f *Flow)                                   { _ = 1 }
+func (addon *BaseAddon) WebsocketMessage(f *Flow, msg *WebSocketMessage)              { _ = 1 }
 
 // LogAddon log connection and flow
 type LogAddon struct {

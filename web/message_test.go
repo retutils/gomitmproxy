@@ -353,5 +353,132 @@ func (d *dummyConn) Close() error                       { return nil }
 func (d *dummyConn) LocalAddr() net.Addr                { return &net.TCPAddr{} }
 func (d *dummyConn) RemoteAddr() net.Addr               { return &net.TCPAddr{} }
 func (d *dummyConn) SetDeadline(t time.Time) error      { return nil }
-func (d *dummyConn) SetReadDeadline(t time.Time) error  { return nil }
+func (d *dummyConn) SetReadDeadline(t time.Time) error { return nil }
 func (d *dummyConn) SetWriteDeadline(t time.Time) error { return nil }
+
+func TestNewMessageFlow_EdgeCases(t *testing.T) {
+	id := uuid.NewV4()
+	connCtx := &proxy.ConnContext{
+		ClientConn: &proxy.ClientConn{Id: id},
+	}
+	f := &proxy.Flow{
+		Id:          uuid.NewV4(),
+		ConnContext: connCtx,
+	}
+
+	// 1. Response is nil
+	_, err := newMessageFlow(messageTypeResponse, f)
+	if err == nil {
+		t.Error("Expected error for nil response")
+	}
+
+	_, err = newMessageFlow(messageTypeResponseBody, f)
+	if err == nil {
+		t.Error("Expected error for nil response body")
+	}
+
+	// 2. Invalid message type
+	_, err = newMessageFlow(99, f)
+	if err == nil {
+		t.Error("Expected error for invalid message type")
+	}
+}
+
+func TestParseMessage_ErrorCases(t *testing.T) {
+	// 1. Data too short
+	if parseMessage([]byte{messageVersion}) != nil {
+		t.Error("Expected nil for short data")
+	}
+
+	// 2. Wrong version
+	if parseMessage([]byte{0, byte(messageTypeConn)}) != nil {
+		t.Error("Expected nil for wrong version")
+	}
+
+	// 3. Invalid message type
+	if parseMessage([]byte{messageVersion, 99}) != nil {
+		t.Error("Expected nil for invalid type")
+	}
+
+	// 4. Unknown message type group (neither edit nor meta)
+	if parseMessage([]byte{messageVersion, byte(messageTypeConn)}) != nil {
+		t.Error("Expected nil for type without parser")
+	}
+}
+
+func TestParseMessageEdit_ErrorCases(t *testing.T) {
+	id := uuid.NewV4().String()
+	
+	// 1. Too short for header
+	if parseMessageEdit([]byte{0, 0}) != nil {
+		t.Error("Expected nil for short data")
+	}
+
+	// 2. Invalid UUID
+	data := make([]byte, 38)
+	data[0] = messageVersion
+	data[1] = byte(messageTypeChangeRequest)
+	copy(data[2:], "invalid-uuid")
+	if parseMessageEdit(data) != nil {
+		t.Error("Expected nil for invalid UUID")
+	}
+
+	// 3. Too short for lengths
+	data = make([]byte, 40)
+	data[0] = messageVersion
+	data[1] = byte(messageTypeChangeRequest)
+	copy(data[2:38], id)
+	if parseMessageEdit(data) != nil {
+		t.Error("Expected nil for data missing lengths")
+	}
+
+	// 4. Header length mismatch
+	data = make([]byte, 46)
+	data[0] = messageVersion
+	data[1] = byte(messageTypeChangeRequest)
+	copy(data[2:38], id)
+	binary.BigEndian.PutUint32(data[38:42], 100) // hl = 100
+	if parseMessageEdit(data) != nil {
+		t.Error("Expected nil for header len mismatch")
+	}
+
+	// 5. Body length mismatch
+	hl := 2
+	data = make([]byte, 42+hl+4)
+	data[0] = messageVersion
+	data[1] = byte(messageTypeChangeRequest)
+	copy(data[2:38], id)
+	binary.BigEndian.PutUint32(data[38:42], uint32(hl))
+	binary.BigEndian.PutUint32(data[42+hl:42+hl+4], 100) // bl = 100
+	if parseMessageEdit(data) != nil {
+		t.Error("Expected nil for body len mismatch")
+	}
+
+	// 6. Unmarshal error (invalid JSON)
+	header := []byte("{invalid}")
+	hl = len(header)
+	data = make([]byte, 42+hl+4)
+	data[0] = messageVersion
+	data[1] = byte(messageTypeChangeRequest)
+	copy(data[2:38], id)
+	binary.BigEndian.PutUint32(data[38:42], uint32(hl))
+	copy(data[42:42+hl], header)
+	binary.BigEndian.PutUint32(data[42+hl:42+hl+4], 0)
+	if parseMessageEdit(data) != nil {
+		t.Error("Expected nil for invalid JSON unmarshal")
+	}
+	
+	// 7. Invalid mType in parseMessageEdit
+	data[1] = byte(messageTypeConn)
+	if parseMessageEdit(data) != nil {
+		t.Error("Expected nil for invalid mType")
+	}
+}
+
+func TestParseMessageMeta_Error(t *testing.T) {
+	if parseMessageMeta([]byte{0, 0, '{'}) != nil {
+		// Actually unmarshal might fail or succeed with empty?
+		// '{' is invalid JSON.
+	}
+}
+

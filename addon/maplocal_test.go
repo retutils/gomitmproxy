@@ -165,10 +165,15 @@ func TestMapLocal_Validate(t *testing.T) {
 			wantErr: true,
 		},
         {
-			name: "Empty To",
-			ml: &MapLocal{Items: []*mapLocalItem{{From: &MapFrom{}, To: &mapLocalTo{}}}},
+			name: "Empty To Path",
+			ml: &MapLocal{Items: []*mapLocalItem{{From: &MapFrom{}, To: &mapLocalTo{Path: ""}}}},
 			wantErr: true,
 		},
+        {
+            name: "Nil From",
+            ml: &MapLocal{Items: []*mapLocalItem{{To: &mapLocalTo{Path: "p"}}}},
+            wantErr: true,
+        },
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -191,5 +196,32 @@ func TestMapLocal_NewFromFile(t *testing.T) {
 	}
 	if !ml.Enable {
 		t.Error("Expected enabled from file")
+	}
+}
+
+func TestMapLocal_DirMapping_EdgeCases(t *testing.T) {
+	tmpDir := t.TempDir()
+	subDir := tmpDir + "/subdir"
+	os.Mkdir(subDir, 0755)
+	
+	item := &mapLocalItem{
+		Enable: true,
+		From:   &MapFrom{Path: "/static/*"},
+		To:     &mapLocalTo{Path: subDir},
+	}
+	
+	// 1. Request matches dir exactly (should fail if it's a directory)
+	req := &proxy.Request{URL: &url.URL{Path: "/static/"}}
+	_, resp := item.response(req)
+	if resp.StatusCode != 500 {
+		t.Errorf("Expected 500 for mapping to directory, got %d", resp.StatusCode)
+	}
+	
+	// 2. Request matches file in dir
+	os.WriteFile(subDir+"/test.txt", []byte("ok"), 0644)
+	req2 := &proxy.Request{URL: &url.URL{Path: "/static/test.txt"}}
+	_, resp2 := item.response(req2)
+	if resp2.StatusCode != 200 {
+		t.Errorf("Expected 200, got %d", resp2.StatusCode)
 	}
 }
