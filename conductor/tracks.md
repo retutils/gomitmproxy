@@ -4,5 +4,5 @@ This file tracks all major tracks for the project. Each track has its own detail
 
 ---
 
-- [ ] **Track: High-Performance DNS Caching with FastDialer**
+- [~] **Track: High-Performance DNS Caching with FastDialer**
   *Link: [./tracks/dns_cache_20260219/](./tracks/dns_cache_20260219/)*
