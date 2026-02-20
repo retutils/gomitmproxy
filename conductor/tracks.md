@@ -1,3 +1,4 @@
-# Project Tracks
+---
 
-This file tracks all major tracks for the project. Each track has its own detailed plan in its respective folder.
+- [ ] **Track: Reach 95% Test Coverage**
+  *Link: [./tracks/coverage_95_20260220/](./tracks/coverage_95_20260220/)*
