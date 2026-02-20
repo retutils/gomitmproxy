@@ -20,7 +20,7 @@
     - [x] Implement logic to satisfy the test.
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Dialer Integration & Logic' (Protocol in workflow.md)
 
-#### Phase 3: CLI Integration
+#### Phase 3: CLI Integration [checkpoint: 3a77bd8]
 - [x] Task: Add CLI flags to `cmd/go-mitmproxy/config.go`. [dc6d058]
     - [ ] `-dns_resolvers`: Comma-separated list of DNS servers.
     - [ ] `-dns_retries`: Number of retries for resolution (default: 2).
