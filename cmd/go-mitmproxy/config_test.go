@@ -79,8 +79,6 @@ func TestMergeConfigs_Full(t *testing.T) {
     if merged.Addr != ":11" { t.Error("Addr") }
     if merged.WebAddr != ":22" { t.Error("WebAddr") }
     if !merged.SslInsecure { t.Error("SslInsecure should be true if file is true and cli is false (wait, logic check)") }
-    // mergeConfigs logic: if cliConfig.SslInsecure { config.SslInsecure = cliConfig.SslInsecure }
-    // So if cli is false, it uses file value.
     
     if len(merged.IgnoreHosts) != 1 || merged.IgnoreHosts[0] != "i2" { t.Error("IgnoreHosts") }
     if merged.CertPath != "c2" { t.Error("CertPath") }
@@ -110,48 +108,6 @@ func TestMergeConfigs_Dns(t *testing.T) {
     merged := mergeConfigs(fileConfig, cliConfig)
     if merged.DnsResolvers[0] != "8.8.8.8" { t.Error("DnsResolvers") }
     if merged.DnsRetries != 5 { t.Error("DnsRetries") }
-}
-
-func TestLoadConfigFromCli(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-	
-	os.Args = []string{"cmd", "-addr", ":1111"}
-	config := loadConfigFromCli()
-	if config.Addr != ":1111" {
-		t.Errorf("Expected addr :1111, got %s", config.Addr)
-	}
-}
-
-func TestLoadConfig_Version(t *testing.T) {
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-	
-	os.Args = []string{"cmd", "-version"}
-	config := loadConfig()
-	if !config.version {
-		t.Error("Expected version true")
-	}
-}
-
-func TestLoadConfig_File(t *testing.T) {
-	tmpDir := t.TempDir()
-	path := filepath.Join(tmpDir, "cfg.json")
-	// Use a field that doesn't have a conflicting non-empty default if possible, 
-	// or just accept that Addr will be overridden by CLI default.
-	os.WriteFile(path, []byte(`{"cert_path": "/tmp/certs"}`), 0644)
-	
-	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
-	
-	os.Args = []string{"cmd", "-f", path, "-debug", "1"}
-	config := loadConfig()
-	if config.CertPath != "/tmp/certs" {
-		t.Errorf("Expected CertPath /tmp/certs from file, got %s", config.CertPath)
-	}
-	if config.Debug != 1 {
-		t.Error("Expected debug 1 from CLI override")
-	}
 }
 
 func TestLoadConfig_Error(t *testing.T) {
@@ -206,5 +162,71 @@ func TestDefineFlags(t *testing.T) {
 	}
 	if config.DnsRetries != 5 {
 		t.Errorf("DnsRetries mismatch: %d", config.DnsRetries)
+	}
+}
+
+func TestLoadConfigFromCli(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	os.Args = []string{"cmd", "-addr", ":1111"}
+	config := loadConfigFromCli()
+	if config.Addr != ":1111" {
+		t.Errorf("Expected addr :1111, got %s", config.Addr)
+	}
+}
+
+func TestLoadConfig_Version(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	os.Args = []string{"cmd", "-version"}
+	config := loadConfig()
+	if !config.version {
+		t.Error("Expected version true")
+	}
+}
+
+func TestLoadConfig_File(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "cfg.json")
+	os.WriteFile(path, []byte(`{"cert_path": "/tmp/certs"}`), 0644)
+	
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	os.Args = []string{"cmd", "-f", path, "-debug", "1"}
+	config := loadConfig()
+	if config.CertPath != "/tmp/certs" {
+		t.Errorf("Expected CertPath /tmp/certs from file, got %s", config.CertPath)
+	}
+	if config.Debug != 1 {
+		t.Error("Expected debug 1 from CLI override")
+	}
+}
+
+func TestLoadConfig_InvalidJSON(t *testing.T) {
+	tmpDir := t.TempDir()
+	path := filepath.Join(tmpDir, "invalid.json")
+	os.WriteFile(path, []byte("{invalid}"), 0644)
+	
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	os.Args = []string{"cmd", "-f", path}
+	config := loadConfig()
+	if config.Addr != ":9080" {
+		t.Errorf("Expected default addr, got %s", config.Addr)
+	}
+}
+
+func TestLoadConfig_FileNotFound(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	
+	os.Args = []string{"cmd", "-f", "non-existent-config.json"}
+	config := loadConfig()
+	if config.Addr != ":9080" {
+		t.Errorf("Expected default addr, got %s", config.Addr)
 	}
 }

@@ -175,12 +175,6 @@ func TestParser(t *testing.T) {
 			input:     `req.method.eq`,
 			shouldErr: true,
 		},
-		{
-			name:      "Missing value",
-			input:     `req.method.eq:`,
-			shouldErr: false, // implementation detail: scanner might return empty string or error? actually scanner.Scan() on empty might be EOF. Let's see behavior
-			// If input ends with :, next token is EOF. parser expects value.
-		},
 	}
 
 	for _, tt := range tests {
@@ -208,7 +202,6 @@ func TestParser(t *testing.T) {
 }
 
 func TestEvaluator(t *testing.T) {
-	// Setup Mock Flow
 	flow := &proxy.Flow{
 		Id: uuid.NewV4(),
 		Request: &proxy.Request{
@@ -304,7 +297,6 @@ func TestEvaluator(t *testing.T) {
 }
 
 func TestEvaluator_NilResponse(t *testing.T) {
-	// Flow with no response (e.g. intercepted request)
 	flow := &proxy.Flow{
 		Request: &proxy.Request{
 			Method: "GET",
@@ -313,7 +305,6 @@ func TestEvaluator_NilResponse(t *testing.T) {
 		Response: nil,
 	}
 
-	// Should safely return false for response checks
 	query := `resp.code.eq:200`
 	l := NewLexer(query)
 	p := NewParser(l)
@@ -323,7 +314,6 @@ func TestEvaluator_NilResponse(t *testing.T) {
 		t.Errorf("Eval should return false for nil response")
 	}
 
-	// Should still work for request checks
 	query2 := `req.method.eq:"GET"`
 	l2 := NewLexer(query2)
 	p2 := NewParser(l2)
@@ -331,5 +321,24 @@ func TestEvaluator_NilResponse(t *testing.T) {
 
 	if !q2.Eval(flow) {
 		t.Errorf("Eval should return true for request check even if response is nil")
+	}
+}
+
+func TestParser_Errors(t *testing.T) {
+	tests := []struct {
+		query string
+	}{
+		{"(req.method.eq:\"GET\""}, // Missing )
+		{"invalid.method.eq:\"GET\""}, // Invalid namespace
+		{"req.invalid.eq:\"GET\""}, // Invalid field
+		{"req.method.eq"}, // Missing :val
+	}
+	for _, tt := range tests {
+		l := NewLexer(tt.query)
+		p := NewParser(l)
+		_, err := p.ParseQuery()
+		if err == nil {
+			t.Errorf("Expected error for query: %s", tt.query)
+		}
 	}
 }

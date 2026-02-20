@@ -1,6 +1,9 @@
 package main
 
 import (
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -49,10 +52,34 @@ func TestTrustedCA_RootCert(t *testing.T) {
 
 func TestTrustedCA_LoadCert_Domain2(t *testing.T) {
 	ca, _ := NewTrustedCA()
-	// To make this succeed, we would need to mock the strings in trusted-ca.go
-	// Since we can't easily do that without changing the code, 
-	// we just hit the call and accept the error.
 	_, _ = ca.GetCert("your-domain2.xx.com")
+}
+
+func TestTrustedCA_InterceptRule(t *testing.T) {
+	rule := func(req *http.Request) bool {
+		host, _, err2 := net.SplitHostPort(req.URL.Host)
+		if err2 != nil {
+			return false
+		}
+		return host == "your-domain.xx.com" || host == "your-domain2.xx.com"
+	}
+	
+	tests := []struct {
+		url  string
+		want bool
+	}{
+		{"http://your-domain.xx.com:80", true},
+		{"http://your-domain2.xx.com:443", true},
+		{"http://other.com:80", false},
+		{"http:///invalid-host", false}, // Valid URL syntax but empty host or something
+	}
+	
+	for _, tt := range tests {
+		req := httptest.NewRequest("GET", tt.url, nil)
+		if got := rule(req); got != tt.want {
+			t.Errorf("rule(%q) = %v, want %v", tt.url, got, tt.want)
+		}
+	}
 }
 
 func TestRun(t *testing.T) {

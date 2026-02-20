@@ -124,6 +124,21 @@ func TestMapRemote_Validate(t *testing.T) {
 			mr: &MapRemote{Items: []*mapRemoteItem{{From: &MapFrom{}, To: &mapRemoteTo{Protocol: "ftp"}}}},
 			wantErr: true,
 		},
+		{
+			name: "Missing From",
+			mr: &MapRemote{Items: []*mapRemoteItem{{To: &mapRemoteTo{Path: "p"}}}},
+			wantErr: true,
+		},
+		{
+			name: "Missing To",
+			mr: &MapRemote{Items: []*mapRemoteItem{{From: &MapFrom{}}}},
+			wantErr: true,
+		},
+		{
+			name: "Empty To",
+			mr: &MapRemote{Items: []*mapRemoteItem{{From: &MapFrom{}, To: &mapRemoteTo{}}}},
+			wantErr: true,
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

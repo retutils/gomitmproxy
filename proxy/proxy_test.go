@@ -7,6 +7,7 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
+	"errors"
     "fmt"
 	"math/big"
 	"net"
@@ -323,5 +324,18 @@ func TestProxy_GetUpstreamConn_ProxyUrlError(t *testing.T) {
 	_, err := p.getUpstreamConn(context.Background(), req)
 	if err == nil {
 		t.Error("Expected error for invalid upstream proxy URL")
+	}
+}
+
+func TestProxy_SetUpstreamProxy_Error(t *testing.T) {
+	p, _ := NewProxy(&Options{Addr: ":0"})
+	p.SetUpstreamProxy(func(req *http.Request) (*url.URL, error) {
+		return nil, errors.New("upstream error")
+	})
+	
+	req := &http.Request{URL: &url.URL{Host: "example.com"}}
+	_, err := p.getUpstreamConn(context.Background(), req)
+	if err == nil {
+		t.Error("Expected error from custom upstream proxy function")
 	}
 }

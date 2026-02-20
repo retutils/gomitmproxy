@@ -18,6 +18,22 @@ func TestRun_Version(t *testing.T) {
 	}
 }
 
+func TestRun_FingerprintList_WithFiles(t *testing.T) {
+	// Setup a fingerprint file
+	tmpDir := t.TempDir()
+	origDir := proxy.FingerprintDir
+	proxy.FingerprintDir = tmpDir
+	defer func() { proxy.FingerprintDir = origDir }()
+	
+	proxy.SaveFingerprint("test-fp", &proxy.Fingerprint{Name: "test-fp"})
+	
+	config := &Config{FingerprintList: true}
+	err := Run(config)
+	if err != nil {
+		t.Errorf("Expected nil error, got %v", err)
+	}
+}
+
 func TestRun_FingerprintList(t *testing.T) {
 	config := &Config{FingerprintList: true}
 	err := Run(config)
@@ -109,6 +125,15 @@ func TestRun_MapErrors(t *testing.T) {
 		MapLocal:  "non-existent.json",
 	}
 	// We run in background because it will start the proxy
+	go Run(config)
+	time.Sleep(100 * time.Millisecond)
+}
+
+func TestRun_ProxyAuthAny(t *testing.T) {
+	config := &Config{
+		Addr:      ":0",
+		ProxyAuth: "any",
+	}
 	go Run(config)
 	time.Sleep(100 * time.Millisecond)
 }

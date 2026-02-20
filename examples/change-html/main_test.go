@@ -38,6 +38,13 @@ func TestChangeHtml(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
-	go Run()
+	// Success case
+	go Run(":0")
 	time.Sleep(100 * time.Millisecond)
+
+	// Error case (invalid address)
+	err := Run("invalid-addr:999999")
+	if err == nil {
+		t.Error("Expected error for invalid address")
+	}
 }

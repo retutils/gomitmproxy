@@ -30,6 +30,11 @@ func TestRewriteHost(t *testing.T) {
 }
 
 func TestRun(t *testing.T) {
-	go Run()
+	go Run(":0")
 	time.Sleep(100 * time.Millisecond)
+	
+	err := Run("invalid:99999")
+	if err == nil {
+		t.Error("Expected error for invalid addr")
+	}
 }

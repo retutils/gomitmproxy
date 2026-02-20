@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"net"
 	"net/http/httptest"
 	"os"
 	"testing"
@@ -25,16 +26,27 @@ func TestTransfer_Error(t *testing.T) {
 func TestTransfer_WrapClientConn(t *testing.T) {
 	log := logrus.NewEntry(logrus.New())
 	
-	server := &mockConn{}
+	// Create real TCP conns to test TCP-specific branches
+	ln, _ := net.Listen("tcp", "127.0.0.1:0")
+	defer ln.Close()
+	
+	go func() {
+		c, _ := net.Dial("tcp", ln.Addr().String())
+		c.Close()
+	}()
+	
+	conn, _ := ln.Accept()
+	defer conn.Close()
+	
     p, _ := NewProxy(&Options{Addr: ":0"})
-    
-    mConn := &mockConn{}
-	client := newWrapClientConn(mConn, p)
-    client.connCtx = &ConnContext{
-        ClientConn: &ClientConn{
-            Conn: mConn,
-        },
-    }
+	client := newWrapClientConn(conn, p)
+	client.connCtx = &ConnContext{
+		ClientConn: &ClientConn{
+			Conn: conn,
+		},
+	}
+	
+	server := &mockConn{}
 	
 	transfer(log, server, client)
 }

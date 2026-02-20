@@ -22,14 +22,14 @@ func (a *RewriteHost) Requestheaders(f *proxy.Flow) {
 }
 
 func main() {
-	if err := Run(); err != nil {
+	if err := Run(":9080"); err != nil {
 		log.Fatal(err)
 	}
 }
 
-func Run() error {
+func Run(addr string) error {
 	opts := &proxy.Options{
-		Addr:              ":9080",
+		Addr:              addr,
 		StreamLargeBodies: 1024 * 1024 * 5,
 	}
 
