@@ -3,6 +3,7 @@
 ## Backend
 *   **Language:** Go 1.24
 *   **Networking:** Standard `net/http` for proxy logic and HTTP handling.
+*   **DNS & Dialing:** `github.com/projectdiscovery/fastdialer` for high-performance DNS caching and connection management.
 *   **Real-time:** `gorilla/websocket` for the Web UI bridge.
 *   **Logging:** `sirupsen/logrus` for structured, leveled logging.
 *   **TLS/Security:** `refraction-networking/utls` for low-level TLS manipulation and fingerprinting (JA3/JA4).

@@ -24,6 +24,7 @@ The primary audience for `gomitmproxy` consists of:
 ## Key Features & Priorities
 *   **Advanced TLS Fingerprinting:** Native support for emulating and capturing JA3/JA4 fingerprints to evade detection.
 *   **Robust Flow Storage & Search:** Local persistence using DuckDB and high-speed search using Bleve, powered by the HTTPQL query language.
+*   **High-Performance DNS Caching:** Integration with `fastdialer` to provide TTL-based DNS caching and optimized connection establishment, reducing latency for repeat requests.
 *   **Strategic Technology Profiling:** Near real-time detection of frameworks and infrastructure using an optimized profiling engine that employs strategic content sampling (inspired by the Wappalyzer browser extension) to maintain high accuracy with minimal performance impact.
 *   **Dynamic Traffic Modification:** Seamless redirection via Map Remote, file serving via Map Local, and fully programmable request/response lifecycle hooks.
 
