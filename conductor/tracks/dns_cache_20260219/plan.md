@@ -21,9 +21,9 @@
 - [ ] Task: Conductor - User Manual Verification 'Phase 2: Dialer Integration & Logic' (Protocol in workflow.md)
 
 #### Phase 3: CLI Integration
-- [ ] Task: Add CLI flags to `cmd/go-mitmproxy/config.go`.
+- [x] Task: Add CLI flags to `cmd/go-mitmproxy/config.go`. [dc6d058]
     - [ ] `-dns_resolvers`: Comma-separated list of DNS servers.
     - [ ] `-dns_retries`: Number of retries for resolution (default: 2).
-- [ ] Task: Map CLI flags to proxy `Options` in `cmd/go-mitmproxy/main.go`.
+- [x] Task: Map CLI flags to proxy `Options` in `cmd/go-mitmproxy/main.go`. [dc6d058]
 - [ ] Task: Verify end-to-end functionality with a live request.
 - [ ] Task: Conductor - User Manual Verification 'Phase 3: CLI Integration' (Protocol in workflow.md)
