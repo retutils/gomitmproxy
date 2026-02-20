@@ -1,6 +1,6 @@
 # Implementation Plan: High-Performance DNS Caching with FastDialer
 
-#### Phase 1: Core Initialization & Options
+#### Phase 1: Core Initialization & Options [checkpoint: ffb6eee]
 - [x] Task: Update `Options` struct in `proxy/proxy.go`. [fc9cf17]
     - [ ] Add `DnsResolvers []string` field.
     - [ ] Add `DnsRetries int` field.
