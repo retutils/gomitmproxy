@@ -81,3 +81,24 @@ func TestService_HostTechnologies(t *testing.T) {
 		t.Error("Nginx not found in results")
 	}
 }
+
+func TestService_HostTechnologies_Errors(t *testing.T) {
+	tmpDir := t.TempDir()
+	svc, _ := NewService(tmpDir)
+	
+	hostname := "error.com"
+	techs := []HostTechnology{{TechName: "Test"}}
+
+	// Close DB to trigger errors
+	svc.db.Close()
+
+	// 1. Save error
+	if err := svc.SaveHostTechnologies(hostname, techs); err == nil {
+		t.Error("Expected error from SaveHostTechnologies on closed DB")
+	}
+
+	// 2. Get error
+	if _, err := svc.GetHostTechnologies(hostname); err == nil {
+		t.Error("Expected error from GetHostTechnologies on closed DB")
+	}
+}

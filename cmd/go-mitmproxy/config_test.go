@@ -64,7 +64,7 @@ func TestMergeConfigs_Full(t *testing.T) {
         Addr: ":1", WebAddr: ":2", SslInsecure: true, IgnoreHosts: []string{"i1"}, AllowHosts: []string{"a1"},
         CertPath: "c1", Debug: 1, Dump: "d1", DumpLevel: 1, Upstream: "u1", UpstreamCert: true,
         MapRemote: "mr1", MapLocal: "ml1", LogFile: "l1", TlsFingerprint: "tf1", FingerprintSave: "fs1",
-        FingerprintList: true, StorageDir: "sd1", ScanPII: true,
+        FingerprintList: true, StorageDir: "sd1", ScanPII: true, ScanTech: true,
     }
     cliConfig := &Config{
         Addr: ":11", WebAddr: ":22", SslInsecure: false, IgnoreHosts: []string{"i2"}, AllowHosts: []string{"a2"},
@@ -94,6 +94,40 @@ func TestMergeConfigs_Full(t *testing.T) {
     if merged.TlsFingerprint != "tf2" { t.Error("TlsFingerprint") }
     if merged.FingerprintSave != "fs2" { t.Error("FingerprintSave") }
     if merged.StorageDir != "sd2" { t.Error("StorageDir") }
+    if !merged.ScanTech { t.Error("ScanTech should be true from file") }
+}
+
+func TestMergeConfigs_Dns(t *testing.T) {
+    fileConfig := &Config{
+        DnsResolvers: []string{"1.1.1.1"},
+        DnsRetries: 3,
+    }
+    cliConfig := &Config{
+        DnsResolvers: []string{"8.8.8.8"},
+        DnsRetries: 5,
+    }
+    merged := mergeConfigs(fileConfig, cliConfig)
+    if merged.DnsResolvers[0] != "8.8.8.8" { t.Error("DnsResolvers") }
+    if merged.DnsRetries != 5 { t.Error("DnsRetries") }
+}
+
+func TestLoadConfig_Basic(t *testing.T) {
+    // This is hard to test because it uses global flag set
+    // But we can test the file loading part
+    tmpDir := t.TempDir()
+    path := filepath.Join(tmpDir, "config.json")
+    cfg := &Config{Addr: ":1234"}
+    data, _ := json.Marshal(cfg)
+    os.WriteFile(path, data, 0644)
+
+    cliCfg := &Config{filename: path}
+    // We can't easily call loadConfig() as it calls loadConfigFromCli() which uses global flags
+    // But we can test mergeConfigs with result of loadConfigFromFile
+    fileCfg, _ := loadConfigFromFile(path)
+    merged := mergeConfigs(fileCfg, cliCfg)
+    if merged.Addr != ":1234" {
+        t.Errorf("Expected addr :1234, got %s", merged.Addr)
+    }
 }
 
 func TestLoadConfig_Error(t *testing.T) {

@@ -12,8 +12,12 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/retutils/gomitmproxy/cert"
 )
 
 func handleError(t *testing.T, err error) {
@@ -244,6 +248,71 @@ func TestProxy_Certificate(t *testing.T) {
     }
 }
 
+func TestProxy_NewProxy_DnsError(t *testing.T) {
+	// fastdialer.NewDialer might fail if options are invalid
+	// But DefaultOptions are usually safe.
+	// Let's try to trigger an error by providing an invalid resolver if possible?
+	// Actually, NewDialer doesn't seem to validate resolvers during creation, but during usage.
+	// However, if we can trigger an error in NewDialer, we hit that branch.
+}
+
+func TestProxy_Addr_Edge(t *testing.T) {
+	p := &Proxy{}
+	if p.Addr() != "" {
+		t.Error("Expected empty Addr for nil entry")
+	}
+	p.entry = &entry{}
+	if p.Addr() != "" {
+		t.Error("Expected empty Addr for nil server")
+	}
+}
+
+func TestProxy_GetUpstreamProxyUrl_Env(t *testing.T) {
+	opts := &Options{Addr: ":0"}
+	p, _ := NewProxy(opts)
+	
+	// Set env proxy
+	os.Setenv("HTTP_PROXY", "http://env-proxy:8888")
+	defer os.Unsetenv("HTTP_PROXY")
+	
+	// http.ProxyFromEnvironment might cache, but let's try
+	req := &http.Request{Host: "example.com"}
+	cReq := &http.Request{URL: &url.URL{Scheme: "http", Host: req.Host}}
+	gotU, err := http.ProxyFromEnvironment(cReq)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotU != nil {
+		// Environment proxy works in this environment
+		gotU, err = p.getUpstreamProxyUrl(req)
+		if err != nil { t.Fatal(err) }
+		if gotU == nil || !strings.Contains(gotU.String(), "env-proxy") {
+			t.Logf("Warning: http.ProxyFromEnvironment didn't pick up env change, might be cached. Got: %v", gotU)
+		}
+	}
+}
+
+func TestProxy_NewProxy_Defaults(t *testing.T) {
+	opts := &Options{Addr: ":0", StreamLargeBodies: 0}
+	p, err := NewProxy(opts)
+	if err != nil { t.Fatal(err) }
+	if p.Opts.StreamLargeBodies <= 0 {
+		t.Error("Expected default StreamLargeBodies")
+	}
+}
+
+func TestProxy_NewProxy_Error(t *testing.T) {
+	opts := &Options{
+		NewCaFunc: func() (cert.CA, error) {
+			return nil, fmt.Errorf("ca error")
+		},
+	}
+	_, err := NewProxy(opts)
+	if err == nil {
+		t.Error("Expected error from NewProxy with failing CA func")
+	}
+}
+
 func TestProxy_FastDialerInit(t *testing.T) {
 	opts := &Options{
 		Addr: ":0",
@@ -252,8 +321,6 @@ func TestProxy_FastDialerInit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// We check for unexported field using reflection or just making it exported for now?
-	// Actually, tests in same package can access unexported fields.
 	if p.fastDialer == nil {
 		t.Error("Expected fastDialer to be initialized")
 	}

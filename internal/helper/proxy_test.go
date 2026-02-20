@@ -52,11 +52,38 @@ func TestGetProxyConn_Socks5(t *testing.T) {
     }
 }
 
-func TestGetProxyConn_Error(t *testing.T) {
+func TestGetProxyConn_HTTPS(t *testing.T) {
+	// Mock HTTPS Proxy Server
+	proxyServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "CONNECT" {
+			w.WriteHeader(http.StatusOK)
+		}
+	}))
+	defer proxyServer.Close()
+
+	proxyUrl, _ := url.Parse(proxyServer.URL)
 	ctx := context.Background()
-	proxyUrl, _ := url.Parse("http://localhost:1") // Invalid port
+	
+	// Use TLSServer's URL which is https
+	conn, err := GetProxyConn(ctx, proxyUrl, "example.com:80", true)
+	if err == nil {
+		conn.Close()
+	}
+}
+
+func TestGetProxyConn_HTTP_Fail(t *testing.T) {
+	proxyServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "CONNECT" {
+			w.WriteHeader(http.StatusForbidden)
+		}
+	}))
+	defer proxyServer.Close()
+
+	proxyUrl, _ := url.Parse(proxyServer.URL)
+	ctx := context.Background()
+	
 	_, err := GetProxyConn(ctx, proxyUrl, "example.com:80", false)
 	if err == nil {
-		t.Error("Expected error for invalid proxy address")
+		t.Error("Expected error for 403 response")
 	}
 }

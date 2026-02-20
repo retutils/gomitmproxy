@@ -1,6 +1,7 @@
 package web
 
 import (
+	"fmt"
 	"net/http"
 	"net/url"
 	"testing"
@@ -66,6 +67,29 @@ func TestWebAddon_CoverageExtra(t *testing.T) {
 	webAddon.flowMessageState[f] = messageTypeResponseBody
 	webAddon.flowMu.Unlock()
 	webAddon.sendMessageUntil(f, messageTypeResponseBody)
+}
+
+func TestWebAddon_Start_Fail(t *testing.T) {
+	// Use an invalid address or one that's already in use
+	webAddon := NewWebAddon("invalid-addr:999999")
+	webAddon.Start()
+	// Should log error but not panic
+}
+
+func TestWebAddon_SendFlow_Error(t *testing.T) {
+	webAddon := NewWebAddon(":0")
+	// Add a connection
+	webAddon.addConn(&concurrentConn{})
+	
+	// sendFlow with failing msgFn
+	webAddon.sendFlow(func() (*messageFlow, error) {
+		return nil, fmt.Errorf("gen error")
+	})
+	
+	// sendFlowMayWait with failing msgFn
+	webAddon.sendFlowMayWait(nil, func() (*messageFlow, error) {
+		return nil, fmt.Errorf("gen error")
+	})
 }
 
 func TestWebAddon_ReadLoop_Coverage(t *testing.T) {
