@@ -44,6 +44,8 @@ type Config struct {
 	Search          string // Search query for stored flows
 	ScanPII         bool   // Enable PII scanning (regex + AC)
 	ScanTech        bool   // Enable technology scanning (Wappalyzer)
+	DnsResolvers    []string
+	DnsRetries      int
 }
 
 func main() {
@@ -136,6 +138,8 @@ func main() {
 		LogFilePath:       config.LogFile,
 		TlsFingerprint:    config.TlsFingerprint,
 		FingerprintSave:   config.FingerprintSave,
+		DnsResolvers:      config.DnsResolvers,
+		DnsRetries:        config.DnsRetries,
 	}
 
 	p, err := proxy.NewProxy(opts)

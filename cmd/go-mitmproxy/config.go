@@ -44,6 +44,8 @@ func loadConfigFromCli() *Config {
 	flag.BoolVar(&config.ScanTech, "scan_tech", false, "Enable technology and framework scanning (Wappalyzer)")
 	flag.StringVar(&config.StorageDir, "storage_dir", "", "Directory to store captured flows (DuckDB + Bleve)")
 	flag.StringVar(&config.Search, "search", "", "Search query for stored flows (requires -storage_dir)")
+	flag.Var((*arrayValue)(&config.DnsResolvers), "dns_resolvers", "a list of DNS resolvers")
+	flag.IntVar(&config.DnsRetries, "dns_retries", 2, "number of DNS resolution retries")
 	flag.Parse()
 
 	return config
@@ -105,6 +107,12 @@ func mergeConfigs(fileConfig, cliConfig *Config) *Config {
 	}
 	if cliConfig.StorageDir != "" {
 		config.StorageDir = cliConfig.StorageDir
+	}
+	if len(cliConfig.DnsResolvers) > 0 {
+		config.DnsResolvers = cliConfig.DnsResolvers
+	}
+	if cliConfig.DnsRetries != 0 {
+		config.DnsRetries = cliConfig.DnsRetries
 	}
 	if cliConfig.ScanPII {
 		config.ScanPII = cliConfig.ScanPII
