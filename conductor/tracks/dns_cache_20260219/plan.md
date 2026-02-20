@@ -11,7 +11,7 @@
 - [x] Task: Write tests for Dialer initialization in `proxy/proxy_test.go`. [fc9cf17]
 - [ ] Task: Conductor - User Manual Verification 'Phase 1: Core Initialization & Options' (Protocol in workflow.md)
 
-#### Phase 2: Dialer Integration & Logic
+#### Phase 2: Dialer Integration & Logic [checkpoint: 5b56fcc]
 - [x] Task: Update `getUpstreamConn` in `proxy/proxy.go` to use `fastDialer`. [9e4767a]
     - [x] Replace `(&net.Dialer{}).DialContext` with `p.fastDialer.Dial`.
     - [x] Implement the retry loop for resolution failures.
