@@ -332,6 +332,8 @@ func TestParser_Errors(t *testing.T) {
 		{"invalid.method.eq:\"GET\""}, // Invalid namespace
 		{"req.invalid.eq:\"GET\""}, // Invalid field
 		{"req.method.eq"}, // Missing :val
+        {"req method.eq:val"}, // Missing dot after namespace
+        {"req.method eq:val"}, // Missing dot after field
 	}
 	for _, tt := range tests {
 		l := NewLexer(tt.query)
